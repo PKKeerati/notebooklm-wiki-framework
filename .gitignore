@@ -1,0 +1,26 @@
+# Knowledge base — private research data
+raw/
+log/
+wiki/
+output/
+
+# Pipeline runtime files
+pipeline/pipeline_state.json
+pipeline/handoffs/handoff_*.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Environment
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db

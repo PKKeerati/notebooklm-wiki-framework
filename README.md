@@ -47,6 +47,22 @@ PK: drops a research question
 **3 checkpoints only.** Everything else runs without interruption.
 Som and Manao run in parallel. Revision loops are silent — PK is only notified if both attempts fail.
 
+### Visual diagram
+
+Open [`pipeline/pipeline_diagram.excalidraw`](pipeline/pipeline_diagram.excalidraw) in [Excalidraw](https://excalidraw.com) or the Obsidian Excalidraw plugin. Shows every agent with its role, reads, outputs, token budget, revision loop, and feedback path — plus a token efficiency panel and legend.
+
+---
+
+## Checkpoints in Detail
+
+| # | Triggered after | What PK sees | PK's action |
+|---|----------------|-------------|-------------|
+| **CP1** | Dao | Gap summary + proposed source list | Approve / edit sources / cancel |
+| **CP2** | Nam | Research doc + 5 directions (effort-rated) | Pick 1–N directions, optional note |
+| **CP3** | Mod | Atomic insights preview + KB diff | Pick output format + optional instructions |
+
+Between checkpoints the pipeline runs unattended. Som and Manao run in parallel via threading. On a `REVISE` verdict, Nam retries silently (max 2 attempts). On the second failure PK gets a soft prompt: retry / proceed anyway / abort.
+
 ---
 
 ## Agent Roles
@@ -62,7 +78,7 @@ Som and Manao run in parallel. Revision loops are silent — PK is only notified
 | **Mod** | Extracts atomic insights, classifies Done/Ongoing/Not done, writes KB | `handoff_mod.md` |
 | **Nanny** | Writes report, slides, and/or Obsidian update | `output/[run_id]/` |
 
-Full specification: [`AGENTS.md`](AGENTS.md)
+Full specification: [`AGENTS.md`](AGENTS.md) — Visual diagram: [`pipeline/pipeline_diagram.excalidraw`](pipeline/pipeline_diagram.excalidraw)
 
 ---
 
@@ -159,7 +175,8 @@ notebooklm-wiki-framework/
 │   │   ├── mod.py             # Insight extractor + KB writer
 │   │   └── nanny.py           # Output writer
 │   ├── handoffs/              # Inter-agent files (gitignored)
-│   └── pipeline_state.json    # Run state (gitignored)
+│   ├── pipeline_state.json    # Run state (gitignored)
+│   └── pipeline_diagram.excalidraw  # Visual pipeline map
 ├── scripts/
 │   ├── wiki_manager.py        # Layer 1: ingest / promote / categorize / query
 │   ├── mistral_ocr_client.py  # PDF extraction via Mistral OCR

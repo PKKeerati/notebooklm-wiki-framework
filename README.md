@@ -1,251 +1,245 @@
 # NotebookLM-Wiki Framework
 
-> A two-layer research intelligence system for Materials Science, Machine Learning Potentials, and Generative Models.
+> A multi-agent research intelligence pipeline for Materials Science, ML Potentials, and Generative Models.
 
 ---
 
-## The Problem
+## What This Is
 
-Modern computational materials science research moves fast. A single week on arXiv can produce 20 relevant papers across ML potentials, generative models, and method development. The tools researchers typically use fall into two failure modes:
+A two-layer system that turns PK's research questions into structured, compounding knowledge — with minimal token cost and maximum autonomy.
 
-- **Chat-based LLMs** (ChatGPT, Claude): Smart, but stateless. Every session starts from zero. You explain the same background every time.
-- **Google NotebookLM**: Great for exploring a specific set of papers, but knowledge doesn't compound. Notebooks are isolated. Nothing you learn in one session enriches the next.
+**Layer 1 — Permanent Brain** (`wiki/` + Obsidian)
+Compounding knowledge base built from research PDFs. Every paper adds to an interconnected graph of findings, methods, and concepts. Powered by Mistral OCR + embeddings.
 
-Neither tool builds toward anything permanent. You are always renting knowledge, never owning it.
+**Layer 2 — Exploration** (Google NotebookLM via `notebooklm-py`)
+Rich media generation: podcasts, quizzes, slide decks, multi-source chat. Discovers new papers. Feeds discoveries back into Layer 1.
+
+The pipeline connects both layers through a multi-agent system that runs autonomously — interrupting PK at exactly 3 checkpoints.
 
 ---
 
-## The Solution: Two-Layer Research Intelligence
-
-This framework combines two open-source tools into a single, coherent research OS:
+## The Pipeline
 
 ```
-Layer 1 — Permanent Brain (llm-wiki-framework)
-    Compounding knowledge base · LaTeX rendering · Obsidian graph view
-    Semantic search · Domain taxonomy · Local & private
-
-Layer 2 — Exploration & Consumption (notebooklm-py)
-    Podcast generation · Quiz/flashcards · Multi-source chat
-    Web research agent · Slide deck generation · Mind maps
+PK: drops a research question
+        │
+      [Dao]          Scans KB index, identifies gap, proposes sources
+        │
+   ── CP1 ──         PK approves source list
+        │
+    [Builder]        Creates NotebookLM notebook, loads sources
+        │
+    [Cherry]         Shapes questions, queries NotebookLM, blind-spot sweep
+        │
+      [Nam]          Synthesises Q&A → research doc + 5 strategic directions
+        │
+   ── CP2 ──         PK picks which directions to pursue
+        │
+  [Som ∥ Manao]      Critic + Fact audit in parallel
+        │
+      [Mod]          Extracts atomic insights, writes to KB
+        │
+   ── CP3 ──         PK picks output format
+        │
+    [Nanny]          Writes report / slides / Obsidian update
 ```
 
-**Layer 1 is your long-term investment.** Every paper you read gets ingested, structured, and linked to existing knowledge. After 100 papers on ML potentials, you have a rich, searchable graph of architectures, benchmarks, and findings — not 100 isolated PDFs.
-
-**Layer 2 is your short-term accelerator.** When you need to deep-dive a topic fast, compare three competing methods, or turn a dense paper into a podcast for your commute — NotebookLM handles it. Then the best insights flow back into Layer 1.
+**3 checkpoints only.** Everything else runs without interruption.
+Som and Manao run in parallel. Revision loops are silent — PK is only notified if both attempts fail.
 
 ---
 
-## Target Research Domains
+## Agent Roles
 
-This framework is pre-configured for:
+| Agent | Role | Output |
+|-------|------|--------|
+| **Dao** | Reads KB index, identifies knowledge gap, proposes sources | `handoff_dao.md` |
+| **Builder** | Creates NotebookLM notebook, loads sources via CLI | `handoff_builder.md` |
+| **Cherry** | Generates targeted questions, runs NLM Q&A + blind-spot sweep | `handoff_cherry.md` |
+| **Nam** | Synthesises Q&A into research doc + 5 strategic directions | `handoff_nam.md` |
+| **Som** | Critiques logic and argument quality (parallel) | `handoff_som.md` |
+| **Manao** | Fact-checks claims against Q&A and KB (parallel) | `handoff_manao.md` |
+| **Mod** | Extracts atomic insights, classifies Done/Ongoing/Not done, writes KB | `handoff_mod.md` |
+| **Nanny** | Writes report, slides, and/or Obsidian update | `output/[run_id]/` |
 
-| Domain | Examples |
-|--------|---------|
-| **ML Interatomic Potentials** | MACE, NequIP, CHGNet, SchNet, PaiNN, ACE, ALIGNN |
-| **Method Acceleration** | Active learning, uncertainty quantification, distillation, surrogate models |
-| **Generative Models for Materials** | Crystal diffusion, flow matching, inverse design, CDVAE, DiffCSP |
-| **Drug Discovery** | Molecular generation, protein-ligand, binding affinity, ADMET |
-| **Ab initio Methods** | DFT, VASP, CP2K, quantum chemistry, basis sets |
-| **Materials Classes** | Crystals & alloys, 2D materials, molecules, proteins, high-entropy alloys |
-
----
-
-## Architecture
-
-```
-                         ┌─────────────────────────────────┐
-                         │        Your Research Inbox       │
-                         │   (arXiv · journals · PDFs)      │
-                         └────────────────┬────────────────┘
-                                          │
-                          ┌───────────────▼───────────────┐
-                          │         raw/  (drop zone)      │
-                          └───────────────┬───────────────┘
-                                          │
-               ┌──────────────────────────▼──────────────────────────┐
-               │               LAYER 1 — Permanent Brain              │
-               │                  (llm-wiki-framework)                │
-               │                                                       │
-               │  [Ingest] Mistral OCR → log/                         │
-               │  [Promote] Type-aware structuring → wiki/             │
-               │  [Categorize] Domain taxonomy → Obsidian graph        │
-               │  [Index] Semantic embeddings → vector search          │
-               └──────────┬──────────────────────┬───────────────────┘
-                          │                       │
-               Permanent  │              On demand │ (topic clusters)
-               knowledge  │                       │
-                          │          ┌────────────▼────────────────┐
-                          │          │   LAYER 2 — Exploration      │
-                          │          │      (notebooklm-py)         │
-                          │          │                              │
-                          │          │  Podcast · Quiz · Chat       │
-                          │          │  Slides · Mind map           │
-                          │          │  Web research agent          │
-                          │          └────────────┬────────────────┘
-                          │                       │
-                          │          New papers discovered
-                          │                       │
-                          └───────────────────────┘
-                               (loop back to raw/)
-```
+Full specification: [`AGENTS.md`](AGENTS.md)
 
 ---
 
-## Workflow
+## Prerequisites
 
-### Daily: Ingest new papers
+### APIs
+- **Anthropic API key** — powers all agents ([console.anthropic.com](https://console.anthropic.com))
+- **Mistral API key** — powers OCR and KB embeddings ([console.mistral.ai](https://console.mistral.ai))
+- **Google account** — for NotebookLM access
+
+### Tools
+- Python 3.10+
+- [Obsidian](https://obsidian.md) — open `wiki/` as your vault
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/PKKeerati/notebooklm-wiki-framework.git
+cd notebooklm-wiki-framework
+pip install -r requirements.txt
+```
+
+### Authenticate NotebookLM
+```bash
+notebooklm login
+```
+This opens a browser for Google OAuth and saves credentials locally.
+
+### Set environment variables
+
+**Windows (PowerShell):**
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+$env:MISTRAL_API_KEY   = "..."
+```
+
+**macOS / Linux:**
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+export MISTRAL_API_KEY="..."
+```
+
+---
+
+## Usage
+
+### Run the pipeline
+
+```bash
+# Start a new run
+python pipeline/orchestrator.py start "What are the most efficient equivariant ML potentials for high-entropy alloys?"
+
+# Resume if interrupted
+python pipeline/orchestrator.py resume
+
+# Check status
+python pipeline/orchestrator.py status
+
+# Clear state for a fresh start
+python pipeline/orchestrator.py reset
+```
+
+### Ingest papers into the KB (Layer 1 only)
 
 ```bash
 # Drop PDFs into raw/, then:
 python scripts/wiki_manager.py all
 ```
 
-Every paper is OCR'd, structured with key findings and methodology extracted, wrapped in LaTeX, and linked into your Obsidian graph. Chemical formulas, energies, and units render perfectly.
-
-### Weekly: Topic deep-dive
+### Semantic search across your KB
 
 ```bash
-# Find new papers on a topic
-notebooklm source add-research "equivariant neural network potentials 2025" --mode deep
-
-# Load a cluster of related papers → listen as podcast
-notebooklm generate audio --wait
-
-# Generate a quiz to test understanding
-notebooklm generate quiz --wait
-notebooklm download quiz --format markdown
-```
-
-### Anytime: Search your brain
-
-```bash
-# Semantic search across your entire library
 python scripts/wiki_manager.py query "message passing equivariant representations benchmark"
 ```
 
-### Research comparison: Multi-source chat
-
-```bash
-# Load MACE, NequIP, CHGNet papers into one notebook
-notebooklm source add mace_paper.pdf nequip_paper.pdf chgnet_paper.pdf
-
-# Ask structured questions
-notebooklm ask "Compare the architectural choices, training data requirements, and MD accuracy of each potential"
-```
-
 ---
 
-## Key Features
-
-### From llm-wiki-framework
-- **High-fidelity OCR** — Mistral OCR handles multi-column papers, tables, figures
-- **Scientific LaTeX wrapping** — Auto-detects formulas (`E_f`, `eV/atom`, `F = -∇E`) and renders them in Obsidian
-- **Type-aware extraction** — Detects research article vs. review vs. thesis, adjusts structure accordingly
-- **Compounding knowledge** — New papers automatically enrich existing concept pages (e.g., every MLP paper adds evidence to your `[[Equivariant Networks]]` concept page)
-- **Obsidian graph view** — Your literature visually clusters into ML Potentials, Generative Models, Methods hubs
-- **Semantic vector search** — Query your library with natural language
-- **Local & private** — Nothing leaves your machine
-
-### From notebooklm-py
-- **Podcast generation** — Turn a 30-page methods paper into a 15-minute audio overview
-- **Quiz & flashcards** — Exportable as JSON/Markdown for Anki or self-study
-- **Multi-source chat** — Ask questions spanning multiple papers simultaneously
-- **Slide deck generation** — Instant presentation outline from source material
-- **Mind map export** — Visual architecture comparison as JSON
-- **Web research agent** — Fast (1–2 min) or deep (5–10 min) literature discovery from within the tool
-- **Programmatic control** — Full Python API for scripting and automation
-
----
-
-## Domain Taxonomy (Pre-configured)
-
-The Obsidian graph view clusters automatically using this taxonomy:
-
-### Applications
-| Hub | Keywords |
-|-----|---------|
-| ML Potentials Hub | MACE, NequIP, SchNet, PaiNN, ACE, force field, equivariant, interatomic potential |
-| Method Acceleration Hub | DFT, active learning, uncertainty, distillation, surrogate, fine-tuning |
-| Generative Models Hub | diffusion, flow matching, VAE, GAN, denoising, crystal generation, inverse design |
-| Drug Discovery Hub | protein, ligand, binding affinity, docking, ADMET, drug-like, scaffold |
-
-### Materials
-| Hub | Keywords |
-|-----|---------|
-| Crystals & Alloys Hub | crystal, alloy, high entropy, defect, grain boundary, perovskite |
-| Molecules Hub | molecular, organic, SMILES, conformer, torsion, drug-like |
-| 2D Materials Hub | MXene, graphene, monolayer, heterostructure, TMD |
-| Proteins & Biomolecules Hub | protein, peptide, enzyme, residue, secondary structure |
-
----
-
-## Why Not Just Use One?
-
-| Scenario | Best tool |
-|----------|-----------|
-| Reading a paper — build permanent knowledge | Layer 1 (wiki) |
-| Preparing a group meeting on a topic | Layer 2 (NotebookLM) |
-| Comparing 3 competing architectures | Layer 2 (NotebookLM chat) |
-| Searching "what did I read about uncertainty quantification?" | Layer 1 (semantic search) |
-| Learning a new subfield fast | Layer 2 (podcast + quiz) |
-| Staying current with arXiv | Layer 2 (web research agent) → Layer 1 (ingest discoveries) |
-| Long-term concept synthesis across 100 papers | Layer 1 (concept pages) |
-
-They are designed to feed each other. NotebookLM discovers and explores; the wiki accumulates and persists.
-
----
-
-## Stack
-
-| Component | Technology |
-|-----------|-----------|
-| OCR & Synthesis | Mistral AI (OCR, Large, Embed) |
-| Exploration & Media | Google NotebookLM (via notebooklm-py) |
-| Knowledge UI | Obsidian |
-| Storage | Local Markdown (portable, version-control friendly) |
-| Language | Python 3.10+ |
-
----
-
-## Planned Structure
+## Project Structure
 
 ```
 notebooklm-wiki-framework/
-├── README.md                        # This file
+├── pipeline/
+│   ├── orchestrator.py        # Main runner — start/resume/status/reset
+│   ├── agents/
+│   │   ├── base.py            # BaseAgent: Anthropic client + prompt caching
+│   │   ├── dao.py             # Librarian
+│   │   ├── builder.py         # Notebook constructor
+│   │   ├── cherry.py          # Question shaper + NLM querier
+│   │   ├── nam.py             # Research synthesiser
+│   │   ├── som.py             # Logic critic
+│   │   ├── manao.py           # Fact auditor
+│   │   ├── mod.py             # Insight extractor + KB writer
+│   │   └── nanny.py           # Output writer
+│   ├── handoffs/              # Inter-agent files (gitignored)
+│   └── pipeline_state.json    # Run state (gitignored)
 ├── scripts/
-│   ├── wiki_manager.py              # Layer 1 orchestration (customized taxonomy)
-│   ├── mistral_ocr_client.py        # PDF extraction
-│   ├── synthesize_concepts.py       # Cross-source synthesis
-│   └── bridge.py                    # Layer 1 ↔ Layer 2 workflow automation
-├── raw/                             # Drop PDFs here (gitignored)
-├── log/                             # Intermediate extractions (gitignored)
-└── wiki/                            # Your knowledge base (gitignored)
-    ├── concepts/                    # AI-synthesized concept pages
-    ├── assets/                      # Extracted figures
-    └── index.md                     # Auto-generated graph index
+│   ├── wiki_manager.py        # Layer 1: ingest / promote / categorize / query
+│   ├── mistral_ocr_client.py  # PDF extraction via Mistral OCR
+│   └── synthesize_concepts.py # Cross-source concept synthesis
+├── raw/                       # Drop PDFs here (gitignored)
+├── log/                       # Intermediate extractions (gitignored)
+├── wiki/                      # Knowledge base — open in Obsidian (gitignored)
+│   ├── concepts/              # AI-synthesised concept pages
+│   ├── assets/                # Extracted figures
+│   └── index.md               # Auto-generated vault index
+├── output/                    # Pipeline reports and slides (gitignored)
+├── AGENTS.md                  # Full agent specification
+├── requirements.txt
+└── .gitignore
 ```
 
-The key addition over `llm-wiki-framework` is `bridge.py` — a script that automates the handoff between layers: discovering papers via NotebookLM's web research agent and routing them into `raw/` for permanent ingestion.
+---
+
+## Domain Taxonomy
+
+Pre-configured for PK's research domains. Controls how the Obsidian graph clusters.
+
+**Applications**
+- ML Potentials — MACE, NequIP, CHGNet, SchNet, ACE, equivariant
+- Method Acceleration — DFT, active learning, uncertainty, surrogate
+- Generative Models — diffusion, flow matching, VAE, inverse design
+- Drug Discovery — protein, ligand, binding affinity, ADMET
+
+**Materials**
+- Crystals & Alloys — crystal, alloy, high-entropy, defect, perovskite
+- Molecules — molecular, SMILES, conformer, torsion
+- 2D Materials — MXene, graphene, monolayer, heterostructure
+- Proteins & Biomolecules — protein, peptide, enzyme, residue
+
+To edit: update `self.taxonomy_apps` and `self.taxonomy_materials` in `scripts/wiki_manager.py`.
 
 ---
 
-## Roadmap
+## Token Efficiency
 
-- [ ] Customized taxonomy for materials science / ML research domains
-- [ ] `bridge.py` — automated Layer 1 ↔ Layer 2 handoff
-- [ ] arXiv RSS integration — daily paper discovery routed to `raw/`
-- [ ] Citation graph extraction — auto-link related papers via `[[wikilinks]]`
-- [ ] Benchmark tracking — structured tables comparing model accuracy across datasets (MatBench, MD17, QM9)
-- [ ] Obsidian plugin config — pre-configured for LaTeX, graph view, dataview queries
+Each agent reads only what it needs — never the full KB:
 
----
+| Agent | Reads |
+|-------|-------|
+| Dao | `wiki/index.md` + vector titles only |
+| Cherry | Handoffs + NotebookLM answers (sources stay in NLM) |
+| Som / Manao | Nam's handoff + Cherry's Q&A |
+| Mod | Approved handoffs + targeted wiki pages |
 
-## Credits
-
-Built on top of:
-- [llm-wiki-framework](https://github.com/Lovorz/llm-wiki-framework) — by Lovorz
-- [notebooklm-py](https://github.com/pchaganti/notebooklm-py) — community client for Google NotebookLM
+All agent system prompts use **prompt caching** (`cache_control: ephemeral`). Repeated runs on the same topic cost significantly less.
 
 ---
 
-*"The researcher's job is not to read papers. It is to build understanding. These tools handle the former so you can focus on the latter."*
+## Typical Workflow
+
+**Daily:** Drop new papers in `raw/`, run `wiki_manager.py all` → Obsidian wiki grows.
+
+**Weekly deep-dive:**
+```bash
+python pipeline/orchestrator.py start "Compare MACE vs NequIP vs CHGNet on MD accuracy"
+# → CP1: approve sources
+# → CP2: pick directions (e.g. "1,3")
+# → CP3: pick output (e.g. "D: report + obsidian")
+```
+
+**Stay current:**
+```bash
+notebooklm source add-research "equivariant neural network potentials 2025" --mode deep
+# → review discovered papers → drop PDFs in raw/ → ingest
+```
+
+---
+
+## Built On
+
+- [llm-wiki-framework](https://github.com/Lovorz/llm-wiki-framework) — Mistral OCR + Obsidian KB engine
+- [notebooklm-py](https://github.com/pchaganti/notebooklm-py) — programmatic Google NotebookLM client
+- [Anthropic Claude](https://anthropic.com) — agent intelligence (claude-sonnet-4-6)
+- [Mistral AI](https://mistral.ai) — OCR and semantic embeddings
+
+---
+
+*"The researcher's job is not to read papers. It is to build understanding."*

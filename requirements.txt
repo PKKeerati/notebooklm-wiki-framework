@@ -3,4 +3,4 @@ mistralai
 pyyaml
 numpy
 requests
-notebooklm
+# notebooklm: install from GitHub — pip install git+https://github.com/pchaganti/notebooklm-py.git

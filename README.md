@@ -85,12 +85,49 @@ Full specification: [`AGENTS.md`](AGENTS.md) — Visual diagram: [`pipeline/pipe
 ## Prerequisites
 
 ### APIs
-- **Anthropic API key** — powers all agents ([console.anthropic.com](https://console.anthropic.com))
-- **Mistral API key** — powers OCR and KB embeddings ([console.mistral.ai](https://console.mistral.ai))
-- **Google account** — for NotebookLM access
+- **Anthropic API key** — powers all pipeline agents ([console.anthropic.com](https://console.anthropic.com))
+- **Google account** — for NotebookLM access ([notebooklm.google.com](https://notebooklm.google.com))
+
+### PDF Extraction — pick one
+
+`wiki_manager.py` supports three backends for extracting text from research PDFs:
+
+| Backend | Cost | Free Limit | Quality | Handles Scans? | Extracts Figures? | API Key? | Best For |
+|---------|------|------------|---------|----------------|-------------------|----------|----------|
+| **PyMuPDF** | Free | Unlimited | Good | No | No | None | Text-based PDFs (most arXiv papers) |
+| **Mistral OCR** | ~$1 / 1000 pages | None | Excellent | Yes | Yes | `MISTRAL_API_KEY` | Scanned papers, books, figures |
+| **Google Gemini** | Free tier | 1000 pages/day | Very good | Yes | Partial | `GEMINI_API_KEY` | Mixed PDFs without Mistral cost |
+
+Set your choice in `wiki_manager.py`:
+```python
+PDF_BACKEND = "pymupdf"    # free, no API key needed
+# PDF_BACKEND = "mistral"  # best quality, requires MISTRAL_API_KEY
+# PDF_BACKEND = "gemini"   # free tier, requires GEMINI_API_KEY
+```
+
+### LLM for Wiki Structuring — pick one
+
+The wiki manager uses an LLM to turn raw PDF text into structured Obsidian notes:
+
+| Provider | Cost | Free Limit | Speed | Output Quality | Requires | Best For |
+|----------|------|------------|-------|----------------|----------|----------|
+| **Gemini 1.5 Flash** | Free tier | 1M tokens/day | Fast | Very good | `GEMINI_API_KEY` | Default free choice |
+| **Groq (Llama 3)** | Free tier | 6000 tokens/min | Fastest | Good | `GROQ_API_KEY` | Speed priority |
+| **Anthropic Claude** | ~$0.01–0.05 / paper | None | Fast | Best | `ANTHROPIC_API_KEY` | Highest quality notes |
+| **Ollama (local)** | Free | Unlimited | Slow (CPU) | Good | None — local model | Full privacy, no internet |
+
+Set your choice in `wiki_manager.py`:
+```python
+LLM_BACKEND = "gemini"      # recommended free option
+# LLM_BACKEND = "groq"      # fastest free option
+# LLM_BACKEND = "anthropic" # best quality
+# LLM_BACKEND = "ollama"    # fully local, no API
+```
+
+**Recommended zero-cost stack:** PyMuPDF + Gemini — no credit card, handles most research PDFs well.
 
 ### Tools
-- Python 3.10+
+- Python 3.9+
 - [Obsidian](https://obsidian.md) — open `wiki/` as your vault
 
 ---
@@ -101,6 +138,15 @@ Full specification: [`AGENTS.md`](AGENTS.md) — Visual diagram: [`pipeline/pipe
 git clone https://github.com/PKKeerati/notebooklm-wiki-framework.git
 cd notebooklm-wiki-framework
 pip install -r requirements.txt
+
+# For PDF extraction (pick one):
+pip install pymupdf          # free, recommended
+# pip install mistralai      # if using Mistral OCR
+# pip install google-genai   # if using Gemini
+
+# For Gemini or Groq LLM backend:
+# pip install google-genai
+# pip install groq
 ```
 
 ### Authenticate NotebookLM

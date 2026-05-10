@@ -2,6 +2,7 @@ import re
 import yaml
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from .base import BaseAgent
 
 SYSTEM = """\
@@ -143,7 +144,7 @@ def _parse_list(text: str, label: str) -> list[str]:
     return [x.strip() for x in raw.split(",") if x.strip() and x.strip().lower() != "none"]
 
 
-def _best_page(title: str, candidates: list[str], wiki_dir: Path) -> Path | None:
+def _best_page(title: str, candidates: list, wiki_dir: Path) -> Optional[Path]:
     title_lower = title.lower()
     for name in candidates:
         page = wiki_dir / f"{name}.md"

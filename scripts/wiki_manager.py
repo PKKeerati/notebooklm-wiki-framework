@@ -100,16 +100,41 @@ def extract_text_mistral(pdf_path: Path) -> str:
         print("  FAIL mistralai not installed. Run: pip install mistralai", file=sys.stderr)
         sys.exit(1)
 
-    import base64
     client = Mistral(api_key=_require_env("MISTRAL_API_KEY"))
-    with open(pdf_path, "rb") as f:
-        data = base64.b64encode(f.read()).decode()
 
-    resp = client.ocr.process(
-        model="mistral-ocr-latest",
-        document={"type": "pdf_document", "document_url": f"data:application/pdf;base64,{data}"},
+    # Upload file first — more reliable than inline base64 for large PDFs
+    pdf_bytes = pdf_path.read_bytes()
+    uploaded = client.files.upload(
+        file={"file_name": pdf_path.name, "content": pdf_bytes},
+        purpose="ocr",
     )
-    return "\n\n".join(page.markdown for page in resp.pages)
+    try:
+        signed = client.files.get_signed_url(file_id=uploaded.id)
+        resp = client.ocr.process(
+            model="mistral-ocr-latest",
+            document={"type": "document_url", "document_url": signed.url},
+            include_image_base64=True,
+        )
+    finally:
+        client.files.delete(file_id=uploaded.id)
+
+    # Save extracted figures to wiki/assets/<stem>/
+    import base64 as _b64
+    assets_dir = WIKI_DIR / "assets" / pdf_path.stem
+    page_texts = []
+    for page in resp.pages:
+        md = page.markdown
+        if page.images:
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            for img in page.images:
+                img_data = _b64.b64decode(img.image_base64.split(",", 1)[-1])
+                img_file = assets_dir / img.id
+                img_file.write_bytes(img_data)
+                # Rewrite markdown reference to local path
+                md = md.replace(f"]({img.id})", f"](assets/{pdf_path.stem}/{img.id})")
+        page_texts.append(md)
+
+    return "\n\n".join(page_texts)
 
 
 def extract_text(pdf_path: Path) -> str:

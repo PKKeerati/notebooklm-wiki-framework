@@ -130,44 +130,56 @@ def extract_text(pdf_path: Path) -> str:
 # -- LLM structuring ----------------------------------------------------------
 
 STRUCTURE_PROMPT = """\
-You are a research knowledge base builder for a materials science / ML researcher.
-Given raw text from a research paper, produce a structured Obsidian wiki page.
+You are a research knowledge base builder for a materials science / ML potentials researcher.
+Given raw text from a research paper, produce a dense, accurate Obsidian wiki page.
 
-Output EXACTLY this format - no preamble, no extra text outside this structure:
+Rules:
+- Extract only facts present in the text. Do not hallucinate or invent details.
+- NEVER write placeholder text like "[See full text...]" — if a section has no content, write N/A.
+- Be specific: include numbers, metrics, model names, dataset names exactly as stated.
+- Tags must be chosen only from these domains (use lowercase-hyphenated form):
+  #ml-potentials | #method-acceleration | #generative-models | #drug-discovery
+  #crystals-and-alloys | #molecules | #2d-materials | #proteins
+
+Output EXACTLY this format — no preamble, no text outside this structure:
 
 ---
-title: [Full paper title]
-authors: [Lastname1 et al. or Lastname1, Lastname2, Lastname3]
+title: [Full paper title as it appears in the text]
+authors: [Lastname1 et al. — if >3 authors, else Lastname1, Lastname2, Lastname3]
 year: [4-digit year, or "unknown"]
-venue: [Journal or conference abbreviation, e.g. NeurIPS 2024, Nature, arXiv]
+venue: [Journal or conference, e.g. NeurIPS 2024, Nature, Physical Review B, arXiv]
 type: paper
-tags: [#tag1 #tag2 - use lowercase hyphenated tags]
+tags: [#tag1 #tag2 — from domain list above only]
 ---
 
 # [Full paper title]
 
 ## Abstract
-[2-3 sentence summary of the paper's core contribution and significance]
+[2–3 sentences: core contribution, primary method, and main quantitative result. Be precise.]
 
 ## Key Findings
 - [Specific finding with numbers/metrics where available]
 - [Second finding]
-- [Third finding]
+- [Third finding — add more bullet points if important]
 
 ## Methods
-- [Main method, model, or architecture]
+- [Primary method, model name, or architecture]
 - [Key dataset or benchmark used]
-- [Important technical detail]
+- [Important implementation or training detail]
 
 ## Results
-- [Best reported metric vs. baseline]
+- [Best reported metric vs. baseline, with exact numbers]
 - [Key comparison result]
+- [Notable ablation or sensitivity result — N/A if none]
 
 ## Limitations
-- [Stated limitation or identified gap]
+- [Stated limitation or gap — N/A if none mentioned]
+
+## Open Questions
+- [Unresolved question or stated future work — N/A if none mentioned]
 
 ## Relevance
-[1-2 sentences on relevance to ML potentials / materials science / generative models]
+[1–2 sentences on relevance to ML potentials / materials simulation / generative models for materials]
 
 ## Citation
 [Authors] ([year]). [Title]. [Venue].
@@ -175,7 +187,7 @@ tags: [#tag1 #tag2 - use lowercase hyphenated tags]
 
 
 def structure_with_llm(raw_text: str, pdf_name: str) -> str:
-    truncated = raw_text[:14000]
+    truncated = raw_text[:25000]
     user_msg = f"Paper filename: {pdf_name}\n\nRaw extracted text:\n{truncated}"
 
     llm_map = {
@@ -475,6 +487,45 @@ def ingest_all() -> None:
     print(f"\nDone. {len(new_pdfs) - failed} ingested, {failed} failed. Wiki: {total} pages total.")
 
 
+def reingest_all(fresh: bool = False) -> None:
+    """Re-ingest all PDFs, overwriting existing wiki pages.
+
+    fresh=True: delete log/ cache first, forcing full re-extraction via PDF_BACKEND.
+    fresh=False: reuse cached log/ text, only regenerate wiki pages via LLM_BACKEND.
+    """
+    pdfs = sorted(RAW_DIR.glob("*.pdf"))
+    if not pdfs:
+        print(f"No PDFs found in {RAW_DIR}/")
+        return
+
+    if fresh:
+        print(f"Clearing log/ cache — will re-extract {len(pdfs)} PDF(s) via [{PDF_BACKEND}]...")
+        for log_file in LOG_DIR.glob("*.txt"):
+            log_file.unlink()
+    else:
+        cached = len(list(LOG_DIR.glob("*.txt"))) if LOG_DIR.exists() else 0
+        print(f"Re-ingesting {len(pdfs)} PDF(s) — reusing {cached} cached extraction(s), LLM=[{LLM_BACKEND}]...")
+
+    # Clear existing wiki pages (except index)
+    if WIKI_DIR.exists():
+        for page in WIKI_DIR.glob("*.md"):
+            if page.name != "index.md":
+                page.unlink()
+        print(f"  Cleared existing wiki pages.")
+
+    failed = 0
+    for pdf in pdfs:
+        try:
+            ingest_pdf(pdf)
+        except Exception as e:
+            print(f"  FAIL  {pdf.name} - {e}", file=sys.stderr)
+            failed += 1
+
+    rebuild_index()
+    total = len(list(WIKI_DIR.glob("*.md"))) - 1
+    print(f"\nDone. {len(pdfs) - failed} ingested, {failed} failed. Wiki: {total} pages total.")
+
+
 # -- Helpers ------------------------------------------------------------------
 
 def _require_env(name: str) -> str:
@@ -514,6 +565,10 @@ def main() -> None:
     p_query = sub.add_parser("query", help="Keyword search across the KB")
     p_query.add_argument("search", help="Search terms (quoted string)")
 
+    p_reingest = sub.add_parser("reingest", help="Re-ingest all PDFs, overwriting existing wiki pages")
+    p_reingest.add_argument("--fresh", action="store_true",
+                            help="Clear log/ cache and re-extract PDFs via PDF_BACKEND (slower)")
+
     args = parser.parse_args()
 
     if args.command == "all":
@@ -525,6 +580,8 @@ def main() -> None:
         query_kb(args.search)
     elif args.command == "index":
         rebuild_index()
+    elif args.command == "reingest":
+        reingest_all(fresh=args.fresh)
 
 
 if __name__ == "__main__":

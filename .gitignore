@@ -1,7 +1,8 @@
 # Knowledge base — private research data
 raw/
 log/
-wiki/
+wiki/*
+!wiki/.obsidian/
 output/
 
 # Pipeline runtime files

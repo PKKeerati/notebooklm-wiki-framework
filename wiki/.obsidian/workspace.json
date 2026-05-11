@@ -1,0 +1,218 @@
+{
+  "main": {
+    "id": "8675f9b2055a3f02",
+    "type": "split",
+    "children": [
+      {
+        "id": "132602e1a3815579",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "2aa6a6bead7ad2b8",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "80ed3dd5ca6dc919",
+    "type": "split",
+    "children": [
+      {
+        "id": "529edd255c7839b7",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "8651e16b52f46f15",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "89470d25a731699d",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": true,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "3c38982ae93692fe",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "c92e457f053cf5cf",
+    "type": "split",
+    "children": [
+      {
+        "id": "32726ca9ac1238e7",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "08becd80f5c3c3f8",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "925340ab5bf0998c",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "6fe5fe67ce506e6f",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "e6c7ec72e7804c19",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "8b28a646d7b2616d",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "2aa6a6bead7ad2b8",
+  "lastOpenFiles": [
+    "Untitled.canvas",
+    "Untitled 8.canvas",
+    "8-323-relativistic-quantum-field-theory-i-lecture-notes-3-di.md",
+    "hub-quantum-theory.md",
+    "hub-phonons-and-anharmonicity.md",
+    "hub-perovskites.md",
+    "hub-gaussian-processes.md",
+    "hub-electrochemistry.md",
+    "accuracy-and-transferability-of-gaussian-approximation-poten.md",
+    "vectors.md",
+    "hub-proteins.md",
+    "hub-index.md",
+    "hub-molecules.md",
+    "hub-ml-potentials.md",
+    "hub-method-acceleration.md",
+    "hub-generative-models.md",
+    "hub-drug-discovery.md",
+    "hub-crystals-and-alloys.md",
+    "hub-2d-materials.md",
+    "2-1-phonons.md",
+    "ovgu_sign.md",
+    "ovgu_sign_druck-eps-converted-to-pdf.md",
+    "Untitled 7.canvas",
+    "2026-05-12.md",
+    "Untitled 6.canvas",
+    "index.md",
+    "Untitled 5.canvas",
+    "Untitled 4.canvas",
+    "XXXX_XX_[Inter-atomic]_1-Program-in-Applied-and-Computational-Mathematics-Princeton.md",
+    "XXXX_XX_[Unknown]_In-this-note-we-present-without-proofs-the-rules-necessary-t.md",
+    "2024_08_[Unknown]_Yang-2024-Nanotechnology-35-475403.md",
+    "Untitled 3.canvas",
+    "Untitled.base",
+    "Untitled 2.canvas",
+    "Untitled 1.canvas"
+  ]
+}

@@ -41,14 +41,20 @@ INDEX_PATH   = WIKI_DIR / "index.md"
 
 # Domain taxonomy - edit to match your research
 TAXONOMY = {
-    "ML Potentials":       ["mace", "nequip", "chgnet", "schnet", "ace", "equivariant", "interatomic potential", "force field"],
-    "Method Acceleration": ["dft", "active learning", "uncertainty quantification", "surrogate", "on-the-fly"],
-    "Generative Models":   ["diffusion", "flow matching", "vae", "inverse design", "generative model"],
-    "Drug Discovery":      ["protein", "ligand", "binding affinity", "admet", "drug discovery"],
-    "Crystals & Alloys":   ["crystal", "alloy", "high-entropy", "hea", "defect", "perovskite", "lattice"],
-    "Molecules":           ["molecular dynamics", "smiles", "conformer", "torsion", "molecular simulation"],
-    "2D Materials":        ["mxene", "graphene", "monolayer", "heterostructure", "2d material"],
-    "Proteins":            ["peptide", "enzyme", "residue", "protein folding", "alphafold"],
+    "ML Potentials":          ["mace", "nequip", "chgnet", "schnet", "ace", "equivariant", "interatomic potential", "force field", "gaussian approximation potential", "gap potential", "atomic cluster expansion"],
+    "Method Acceleration":    ["dft", "active learning", "uncertainty quantification", "surrogate", "on-the-fly", "ab initio", "first principles", "density functional"],
+    "Generative Models":      ["diffusion", "flow matching", "vae", "inverse design", "generative model"],
+    "Drug Discovery":         ["ligand", "binding affinity", "admet", "drug discovery"],
+    "Crystals & Alloys":      ["crystal", "alloy", "high-entropy", "hea", "defect", "lattice", "bcc", "fcc", "solid solution"],
+    "Molecules":              ["molecular dynamics", "smiles", "conformer", "torsion", "molecular simulation", "charge transfer", "organic semiconductor", "electron coupling"],
+    "2D Materials":           ["mxene", "graphene", "monolayer", "heterostructure", "2d material"],
+    "Proteins":               ["peptide", "enzyme", "residue", "protein folding", "alphafold"],
+    "Phonons & Anharmonicity": ["phonon", "phonopy", "anharmonic", "anharmonicity", "thermal conductivity", "force constant", "brillouin", "phono3py", "lattice dynamics", "heat transport"],
+    "Perovskites":            ["perovskite", "halide", "solar cell", "photovoltaic", "thermoelectric", "methylammonium", "cesium lead", "lead iodide", "optoelectronic"],
+    "Electrochemistry":       ["battery", "oxygen reduction", "superoxide", "electrocatalyst", "orr", "oer", "metal-air", "li-air", "electrode", "potassium-oxygen", "overpotential"],
+    "Quantum Theory":         ["angular momentum", "wigner", "clebsch-gordan", "hamiltonian", "quantum field", "wave function", "spin", "commutator", "hilbert space", "quantum mechanics"],
+    "Gaussian Processes":     ["gaussian process", "gp regression", "kernel matrix", "bayesian optim", "acquisition function", "covariance function", "radial basis", "posterior mean"],
+    "Personal":               ["booking confirmation", "statement of registration", "tourist visa", "schengen", "seattle plan", "research proposal confirmation", "late stage review"],
 }
 
 
@@ -544,16 +550,21 @@ def make_hubs() -> None:
 
     vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
 
-    # Build tag → [(slug, title, year)] mapping (skip hub pages and bad tags)
+    # Build tag → [(slug, title, year)] mapping — read tags from page files
+    # (not vectors.json, which may have stale tags after fix-tags)
     _skip_tags = {"#uncategorized", "#n/a", "#na", "#personal"}
     tag_papers: dict = {}
     for slug, meta in vectors.items():
         page_path = WIKI_DIR / f"{slug}.md"
         if not page_path.exists():
             continue
-        if "type: hub" in page_path.read_text(encoding="utf-8"):
+        text = page_path.read_text(encoding="utf-8")
+        if "type: hub" in text:
             continue
-        for tag in meta.get("tags", "").split():
+        tags_m = re.search(r"^tags:\s*(.+)$", text, re.MULTILINE)
+        if not tags_m:
+            continue
+        for tag in tags_m.group(1).split():
             tag = tag.strip().lower()
             if not tag.startswith("#") or tag in _skip_tags:
                 continue
@@ -589,9 +600,11 @@ def make_hubs() -> None:
         if "type: hub" in text:
             continue
 
+        tags_m = re.search(r"^tags:\s*(.+)$", text, re.MULTILINE)
+        page_tags = tags_m.group(1).split() if tags_m else []
         hub_links = [
-            f"- [[{hub_slugs[tag]}|{_hub_display_name(tag)}]]"
-            for tag in meta.get("tags", "").split()
+            f"- [[{hub_slugs[tag.strip().lower()]}|{_hub_display_name(tag.strip().lower())}]]"
+            for tag in page_tags
             if tag.strip().lower() in hub_slugs
         ]
         if not hub_links:

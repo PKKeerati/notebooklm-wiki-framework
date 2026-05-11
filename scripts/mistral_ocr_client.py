@@ -92,7 +92,7 @@ def save_output(result: dict, output_dir: Path, fmt: str) -> Path:
 
 def run(pdf_targets: list, save_images: bool, output_dir: Path, fmt: str) -> None:
     try:
-        from mistralai.client import Mistral
+        from mistralai import Mistral
     except ImportError:
         print("FAIL  mistralai not installed. Run: pip install mistralai", file=sys.stderr)
         sys.exit(1)

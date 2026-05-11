@@ -109,7 +109,7 @@ class Orchestrator:
                 _err("MISTRAL_API_KEY not set. Export it and retry.")
                 sys.exit(1)
             try:
-                from mistralai.client import Mistral
+                from mistralai import Mistral
             except ImportError:
                 _err("mistralai not installed. Run: pip install mistralai")
                 sys.exit(1)

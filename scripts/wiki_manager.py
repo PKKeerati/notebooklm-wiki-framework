@@ -96,7 +96,7 @@ def extract_text_pymupdf(pdf_path: Path) -> str:
 def extract_text_mistral(pdf_path: Path) -> str:
     import base64
     try:
-        from mistralai.client import Mistral
+        from mistralai import Mistral
     except ImportError:
         print("  FAIL mistralai not installed. Run: pip install mistralai", file=sys.stderr)
         sys.exit(1)
@@ -273,7 +273,7 @@ def _llm_ollama(system: str, user: str) -> str:
 
 def _llm_mistral(system: str, user: str) -> str:
     try:
-        from mistralai.client import Mistral
+        from mistralai import Mistral
     except ImportError:
         print("  FAIL mistralai not installed. Run: pip install mistralai", file=sys.stderr)
         sys.exit(1)

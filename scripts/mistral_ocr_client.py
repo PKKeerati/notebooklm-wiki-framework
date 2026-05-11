@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-mistral_ocr_client.py — Standalone Mistral OCR for research PDFs
+mistral_ocr_client.py — Standalone Mistral OCR for research PDFs (base64 inline)
 
 Usage:
     python scripts/mistral_ocr_client.py raw/paper.pdf
@@ -32,24 +32,19 @@ def _require_env(name: str) -> str:
 
 
 def ocr_pdf(pdf_path: Path, client, save_images: bool, output_dir: Path) -> dict:
-    """OCR a single PDF. Returns dict with keys: path, pages, num_pages, num_images."""
-    print(f"  Uploading {pdf_path.name}...")
-    pdf_bytes = pdf_path.read_bytes()
-    uploaded = client.files.upload(
-        file={"file_name": pdf_path.name, "content": pdf_bytes},
-        purpose="ocr",
-    )
+    """OCR a single PDF using base64 inline. Returns dict with keys: path, pages, num_pages, num_images."""
+    print(f"  Encoding {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)...")
+    pdf_b64 = base64.standard_b64encode(pdf_path.read_bytes()).decode()
 
-    try:
-        signed = client.files.get_signed_url(file_id=uploaded.id)
-        print(f"  Running OCR ({pdf_path.stat().st_size // 1024} KB)...")
-        resp = client.ocr.process(
-            model="mistral-ocr-latest",
-            document={"type": "document_url", "document_url": signed.url},
-            include_image_base64=save_images,
-        )
-    finally:
-        client.files.delete(file_id=uploaded.id)
+    print(f"  Running OCR...")
+    resp = client.ocr.process(
+        model="mistral-ocr-latest",
+        document={
+            "type": "document_url",
+            "document_url": f"data:application/pdf;base64,{pdf_b64}",
+        },
+        include_image_base64=save_images,
+    )
 
     pages = []
     total_images = 0
@@ -95,7 +90,7 @@ def save_output(result: dict, output_dir: Path, fmt: str) -> Path:
     return out_path
 
 
-def run(pdf_targets: list[Path], save_images: bool, output_dir: Path, fmt: str) -> None:
+def run(pdf_targets: list, save_images: bool, output_dir: Path, fmt: str) -> None:
     try:
         from mistralai.client import Mistral
     except ImportError:

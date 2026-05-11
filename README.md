@@ -114,13 +114,21 @@ The wiki manager uses an LLM to turn raw PDF text into structured Obsidian notes
 | **Gemini 1.5 Flash** | Free tier | 1M tokens/day | Fast | Very good | `GEMINI_API_KEY` | Default free choice |
 | **Groq (Llama 3)** | Free tier | 6000 tokens/min | Fastest | Good | `GROQ_API_KEY` | Speed priority |
 | **Anthropic Claude** | ~$0.01–0.05 / paper | None | Fast | Best | `ANTHROPIC_API_KEY` | Highest quality notes |
+| **Mistral** | ~$0.002 / paper | None | Fast | Very good | `MISTRAL_API_KEY` | High quality, low cost |
 | **Ollama (local)** | Free | Unlimited | Slow (CPU) | Good | None — local model | Full privacy, no internet |
 
-Set your choice in `wiki_manager.py`:
+Set your choice via env var or in `wiki_manager.py`:
+```bash
+export LLM_BACKEND=mistral   # or: gemini | groq | anthropic | ollama
+export MISTRAL_API_KEY="..."
+# Optional: override model (default: mistral-small-latest)
+export MISTRAL_MODEL=mistral-large-latest
+```
 ```python
 LLM_BACKEND = "gemini"      # recommended free option
 # LLM_BACKEND = "groq"      # fastest free option
 # LLM_BACKEND = "anthropic" # best quality
+# LLM_BACKEND = "mistral"   # high quality, low cost
 # LLM_BACKEND = "ollama"    # fully local, no API
 ```
 
@@ -144,9 +152,10 @@ pip install pymupdf          # free, recommended
 # pip install mistralai      # if using Mistral OCR
 # pip install google-genai   # if using Gemini
 
-# For Gemini or Groq LLM backend:
-# pip install google-genai
-# pip install groq
+# For LLM backend (pick one):
+# pip install google-genai   # Gemini
+# pip install groq            # Groq
+# pip install mistralai       # Mistral (also used for OCR)
 ```
 
 ### Authenticate NotebookLM

@@ -11,7 +11,7 @@ Commands:
 
 Backend config (set here or override with env vars PDF_BACKEND / LLM_BACKEND):
     PDF_BACKEND: gemini | pymupdf | mistral
-    LLM_BACKEND: gemini | groq | anthropic | ollama
+    LLM_BACKEND: gemini | groq | anthropic | ollama | mistral
 """
 
 import argparse
@@ -26,7 +26,7 @@ from pathlib import Path
 # -- Config -------------------------------------------------------------------
 
 PDF_BACKEND = os.environ.get("PDF_BACKEND", "pymupdf")  # pymupdf | gemini | mistral
-LLM_BACKEND = os.environ.get("LLM_BACKEND", "gemini")   # gemini | groq | anthropic | ollama
+LLM_BACKEND = os.environ.get("LLM_BACKEND", "gemini")   # gemini | groq | anthropic | ollama | mistral
 
 # Gemini free tier: 15 requests/min. Sleep 4s between calls to stay safe.
 GEMINI_RATE_LIMIT_SLEEP = int(os.environ.get("GEMINI_SLEEP", "4"))
@@ -95,7 +95,7 @@ def extract_text_pymupdf(pdf_path: Path) -> str:
 
 def extract_text_mistral(pdf_path: Path) -> str:
     try:
-        from mistralai import Mistral
+        from mistralai.client import Mistral
     except ImportError:
         print("  FAIL mistralai not installed. Run: pip install mistralai", file=sys.stderr)
         sys.exit(1)
@@ -206,10 +206,11 @@ def structure_with_llm(raw_text: str, pdf_name: str) -> str:
         "groq":      _llm_groq,
         "anthropic": _llm_anthropic,
         "ollama":    _llm_ollama,
+        "mistral":   _llm_mistral,
     }
     fn = llm_map.get(LLM_BACKEND)
     if not fn:
-        raise ValueError(f"Unknown LLM_BACKEND '{LLM_BACKEND}'. Choose: gemini | groq | anthropic | ollama")
+        raise ValueError(f"Unknown LLM_BACKEND '{LLM_BACKEND}'. Choose: gemini | groq | anthropic | ollama | mistral")
 
     print(f"  Structuring into wiki page [{LLM_BACKEND}]...")
     return fn(STRUCTURE_PROMPT, user_msg)
@@ -279,6 +280,37 @@ def _llm_ollama(system: str, user: str) -> str:
         "stream": False,
     }, timeout=120)
     return resp.json()["response"]
+
+
+def _llm_mistral(system: str, user: str) -> str:
+    try:
+        from mistralai.client import Mistral
+    except ImportError:
+        print("  FAIL mistralai not installed. Run: pip install mistralai", file=sys.stderr)
+        sys.exit(1)
+    model = os.environ.get("MISTRAL_MODEL", "mistral-small-latest")
+    sleep_s = int(os.environ.get("MISTRAL_SLEEP", "2"))
+    client = Mistral(api_key=_require_env("MISTRAL_API_KEY"))
+    for attempt in range(4):
+        try:
+            resp = client.chat.complete(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                max_tokens=2000,
+            )
+            time.sleep(sleep_s)
+            return resp.choices[0].message.content
+        except Exception as e:
+            if "429" in str(e) or "rate_limited" in str(e).lower():
+                wait = 60 * (attempt + 1)
+                print(f"  Rate limited — waiting {wait}s before retry {attempt + 1}/3...")
+                time.sleep(wait)
+            else:
+                raise
+    raise RuntimeError("Mistral rate limit exceeded after 3 retries.")
 
 
 # -- Wiki page writing --------------------------------------------------------

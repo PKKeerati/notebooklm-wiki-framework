@@ -526,6 +526,108 @@ def reingest_all(fresh: bool = False) -> None:
     print(f"\nDone. {len(pdfs) - failed} ingested, {failed} failed. Wiki: {total} pages total.")
 
 
+# -- Hub pages ----------------------------------------------------------------
+
+def _tag_to_hub_slug(tag: str) -> str:
+    return "hub-" + tag.lstrip("#")
+
+
+def _hub_display_name(tag: str) -> str:
+    return tag.lstrip("#").replace("-and-", " & ").replace("-", " ").title()
+
+
+def make_hubs() -> None:
+    """Create one hub page per taxonomy category and add ## Categories links to every paper."""
+    if not VECTORS_PATH.exists():
+        print("No vectors index found. Run 'all' first.")
+        return
+
+    vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
+
+    # Build tag → [(slug, title, year)] mapping (skip hub pages and bad tags)
+    _skip_tags = {"#uncategorized", "#n/a", "#na", "#personal"}
+    tag_papers: dict = {}
+    for slug, meta in vectors.items():
+        page_path = WIKI_DIR / f"{slug}.md"
+        if not page_path.exists():
+            continue
+        if "type: hub" in page_path.read_text(encoding="utf-8"):
+            continue
+        for tag in meta.get("tags", "").split():
+            tag = tag.strip().lower()
+            if not tag.startswith("#") or tag in _skip_tags:
+                continue
+            tag_papers.setdefault(tag, []).append(
+                (slug, meta["title"], meta.get("year", ""))
+            )
+
+    # Write one hub page per tag
+    hub_slugs: dict = {}
+    for tag, papers in sorted(tag_papers.items()):
+        hub_slug = _tag_to_hub_slug(tag)
+        hub_slugs[tag] = hub_slug
+        display = _hub_display_name(tag)
+        lines = [
+            f"---\ntitle: {display} — Research Hub\ntype: hub\ntags: {tag}\n---\n\n",
+            f"# {display}\n\n",
+            f"*Hub — {len(papers)} papers in this cluster.*\n\n",
+            "## Papers\n\n",
+        ]
+        for s, t, y in sorted(papers, key=lambda x: x[2], reverse=True):
+            suffix = f" ({y})" if y and y != "unknown" else ""
+            lines.append(f"- [[{s}|{t}]]{suffix}\n")
+        (WIKI_DIR / f"{hub_slug}.md").write_text("".join(lines), encoding="utf-8")
+        print(f"  Hub: {hub_slug}.md  ({len(papers)} papers)")
+
+    # Add ## Categories section to each paper
+    updated = 0
+    for slug, meta in vectors.items():
+        page_path = WIKI_DIR / f"{slug}.md"
+        if not page_path.exists():
+            continue
+        text = page_path.read_text(encoding="utf-8")
+        if "type: hub" in text:
+            continue
+
+        hub_links = [
+            f"- [[{hub_slugs[tag]}|{_hub_display_name(tag)}]]"
+            for tag in meta.get("tags", "").split()
+            if tag.strip().lower() in hub_slugs
+        ]
+        if not hub_links:
+            continue
+
+        cat_section = "\n\n## Categories\n" + "\n".join(hub_links)
+
+        # Remove stale Categories section
+        text = re.sub(r"\n\n## Categories\n.*?(?=\n\n##|\n\n---|\Z)", "",
+                      text, flags=re.DOTALL)
+
+        # Insert before ## See Also or before footer, whichever comes first
+        anchor = re.search(r"\n\n## See Also\n|\n\n---\n\*Ingested:", text)
+        pos = anchor.start() if anchor else len(text)
+        text = text[:pos] + cat_section + text[pos:]
+        page_path.write_text(text, encoding="utf-8")
+        updated += 1
+
+    # Write meta-hub (hub-index.md)
+    meta_lines = [
+        "---\ntitle: Research Knowledge Base\ntype: hub\n---\n\n",
+        "# Research Knowledge Base\n\n",
+        "*Top-level hub — links to all research clusters.*\n\n",
+        "## Clusters\n\n",
+    ]
+    for tag in sorted(hub_slugs):
+        display = _hub_display_name(tag)
+        count = len(tag_papers.get(tag, []))
+        meta_lines.append(f"- [[{hub_slugs[tag]}|{display}]] ({count} papers)\n")
+    (WIKI_DIR / "hub-index.md").write_text("".join(meta_lines), encoding="utf-8")
+
+    print(f"\n  {len(hub_slugs)} category hubs created: wiki/hub-*.md")
+    print(f"  Categories section added to {updated} paper pages.")
+    print(f"  Meta-hub: wiki/hub-index.md")
+
+
 # -- Tag cleanup --------------------------------------------------------------
 
 _BAD_TAGS = {"#n/a", "#na", "#uncategorized"}
@@ -678,6 +780,8 @@ def main() -> None:
     p_link.add_argument("--top", type=int, default=5,
                         help="Number of related pages to link per page (default: 5)")
 
+    sub.add_parser("make-hubs", help="Create category hub pages and add Categories links to all papers")
+
     args = parser.parse_args()
 
     if args.command == "all":
@@ -695,6 +799,8 @@ def main() -> None:
         fix_tags()
     elif args.command == "link":
         link_pages(top_n=args.top)
+    elif args.command == "make-hubs":
+        make_hubs()
 
 
 if __name__ == "__main__":

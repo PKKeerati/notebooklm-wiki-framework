@@ -48,10 +48,18 @@ export LLM_BACKEND=gemini     # gemini | groq | anthropic | ollama | mistral
 ```
 
 **Required API keys** (depending on backends chosen):
-- `ANTHROPIC_API_KEY` — required for all pipeline agents; optional for wiki LLM
-- `MISTRAL_API_KEY` — if `PDF_BACKEND=mistral`
+- `ANTHROPIC_API_KEY` — required for pipeline agents unless `PIPELINE_LLM_BACKEND=mistral`
+- `MISTRAL_API_KEY` — if `PDF_BACKEND=mistral` or `PIPELINE_LLM_BACKEND=mistral`
 - `GEMINI_API_KEY` — if `PDF_BACKEND=gemini` or `LLM_BACKEND=gemini`
 - `GROQ_API_KEY` — if `LLM_BACKEND=groq`
+
+**Pipeline LLM backend** — controls which LLM the pipeline agents use:
+```bash
+export PIPELINE_LLM_BACKEND=anthropic   # default — uses Claude (claude-sonnet-4-6)
+export PIPELINE_LLM_BACKEND=mistral     # uses Mistral (MISTRAL_MODEL, default: mistral-small-latest)
+export MISTRAL_MODEL=mistral-large-latest  # optional model override
+export MISTRAL_SLEEP=2                     # optional inter-call sleep in seconds
+```
 
 **NotebookLM auth** (one-time):
 ```bash

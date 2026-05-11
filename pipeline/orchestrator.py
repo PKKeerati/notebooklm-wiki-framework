@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import anthropic
+from agents.base import PIPELINE_LLM_BACKEND
 from agents import (
     DaoAgent, BuilderAgent, CherryAgent, NamAgent,
     SomAgent, ManaoAgent, ModAgent, NannyAgent,
@@ -102,11 +103,23 @@ def _err(msg: str) -> None:
 
 class Orchestrator:
     def __init__(self) -> None:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            _err("ANTHROPIC_API_KEY not set. Export it and retry.")
-            sys.exit(1)
-        self.client = anthropic.Anthropic(api_key=api_key)
+        if PIPELINE_LLM_BACKEND == "mistral":
+            api_key = os.environ.get("MISTRAL_API_KEY")
+            if not api_key:
+                _err("MISTRAL_API_KEY not set. Export it and retry.")
+                sys.exit(1)
+            try:
+                from mistralai.client import Mistral
+            except ImportError:
+                _err("mistralai not installed. Run: pip install mistralai")
+                sys.exit(1)
+            self.client = Mistral(api_key=api_key)
+        else:
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+            if not api_key:
+                _err("ANTHROPIC_API_KEY not set. Export it and retry.")
+                sys.exit(1)
+            self.client = anthropic.Anthropic(api_key=api_key)
         HANDOFFS_DIR.mkdir(exist_ok=True)
 
     # ── Main loop ─────────────────────────────────────────────────────────────

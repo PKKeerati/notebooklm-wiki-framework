@@ -526,6 +526,109 @@ def reingest_all(fresh: bool = False) -> None:
     print(f"\nDone. {len(pdfs) - failed} ingested, {failed} failed. Wiki: {total} pages total.")
 
 
+# -- Tag cleanup --------------------------------------------------------------
+
+_BAD_TAGS = {"#n/a", "#na", "#uncategorized"}
+
+
+def fix_tags() -> None:
+    """Strip bad tags (#N/A, #uncategorized) and re-run keyword matcher on all pages."""
+    pages = sorted(WIKI_DIR.glob("*.md"))
+    fixed = skipped = 0
+
+    for page in pages:
+        if page.name == "index.md":
+            continue
+        text = page.read_text(encoding="utf-8")
+        tags_m = re.search(r"^(tags:\s*)(.+)$", text, re.MULTILINE)
+        if not tags_m:
+            continue
+
+        existing = set(tags_m.group(2).split())
+        clean = {t for t in existing if t.lower() not in _BAD_TAGS}
+        auto = set(_auto_tags(text))
+        # auto_tags returns ["#uncategorized"] if nothing matched — skip that
+        if auto == {"#uncategorized"}:
+            auto = set()
+        merged = clean | auto or {"#uncategorized"}
+
+        new_tags_line = tags_m.group(1) + " ".join(sorted(merged))
+        new_text = re.sub(r"^tags:\s*.+$", new_tags_line, text, flags=re.MULTILINE)
+
+        if new_text != text:
+            page.write_text(new_text, encoding="utf-8")
+            fixed += 1
+        else:
+            skipped += 1
+
+    rebuild_index()
+    print(f"  Tags fixed: {fixed} pages updated, {skipped} unchanged.")
+
+
+# -- Cross-linking (See Also) -------------------------------------------------
+
+def _tag_set(tags_str: str) -> set:
+    return {t.strip().lower() for t in tags_str.split() if t.startswith("#")}
+
+
+def _keyword_tokens(meta: dict) -> set:
+    raw = f"{meta['title']} {meta['keywords']}".lower()
+    tokens = set(re.findall(r"[a-z]{4,}", raw))
+    return tokens - {"with", "from", "that", "this", "they", "have", "been",
+                     "into", "their", "using", "based", "which", "more", "also",
+                     "than", "show", "such", "high", "both", "between", "model"}
+
+
+def link_pages(top_n: int = 5) -> None:
+    """Add/update ## See Also wikilinks to each wiki page using the vectors index."""
+    if not VECTORS_PATH.exists():
+        print("No vectors index found. Run 'all' first.")
+        return
+
+    vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
+    updated = 0
+
+    for slug, meta in vectors.items():
+        page_path = WIKI_DIR / f"{slug}.md"
+        if not page_path.exists():
+            continue
+
+        my_tags = _tag_set(meta.get("tags", ""))
+        my_tokens = _keyword_tokens(meta)
+
+        scores = []
+        for other_slug, other_meta in vectors.items():
+            if other_slug == slug:
+                continue
+            tag_overlap = len(my_tags & _tag_set(other_meta.get("tags", "")))
+            kw_overlap  = len(my_tokens & _keyword_tokens(other_meta))
+            score = tag_overlap * 3 + kw_overlap
+            if score > 0:
+                scores.append((score, other_slug, other_meta["title"]))
+
+        scores.sort(reverse=True)
+        top = scores[:top_n]
+        if not top:
+            continue
+
+        see_also = "\n\n## See Also\n" + "\n".join(
+            f"- [[{s}|{t}]]" for _, s, t in top
+        )
+
+        text = page_path.read_text(encoding="utf-8")
+        # Remove old See Also section if present
+        text = re.sub(r"\n\n## See Also\n.*", "", text, flags=re.DOTALL)
+        # Remove trailing ingestion footer, re-append after See Also
+        footer_m = re.search(r"\n\n---\n\*Ingested:.*", text, re.DOTALL)
+        footer = footer_m.group(0) if footer_m else ""
+        body = text[:footer_m.start()] if footer_m else text
+
+        page_path.write_text(body + see_also + footer, encoding="utf-8")
+        updated += 1
+
+    print(f"  See Also links added/updated on {updated} pages.")
+
+
 # -- Helpers ------------------------------------------------------------------
 
 def _require_env(name: str) -> str:
@@ -569,6 +672,12 @@ def main() -> None:
     p_reingest.add_argument("--fresh", action="store_true",
                             help="Clear log/ cache and re-extract PDFs via PDF_BACKEND (slower)")
 
+    sub.add_parser("fix-tags", help="Strip bad tags and re-run keyword matcher on all pages")
+
+    p_link = sub.add_parser("link", help="Add See Also wikilinks between related pages")
+    p_link.add_argument("--top", type=int, default=5,
+                        help="Number of related pages to link per page (default: 5)")
+
     args = parser.parse_args()
 
     if args.command == "all":
@@ -582,6 +691,10 @@ def main() -> None:
         rebuild_index()
     elif args.command == "reingest":
         reingest_all(fresh=args.fresh)
+    elif args.command == "fix-tags":
+        fix_tags()
+    elif args.command == "link":
+        link_pages(top_n=args.top)
 
 
 if __name__ == "__main__":

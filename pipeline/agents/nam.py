@@ -1,3 +1,4 @@
+import re
 from .base import BaseAgent
 
 SYSTEM = """\
@@ -12,6 +13,9 @@ Given a Q&A document from NotebookLM and a knowledge gap description, produce:
 Rules:
 - Every claim must be traceable to the Q&A or the gap description.
 - If you cannot support a claim, remove it — do not hedge.
+- **CRITICAL — No invented numbers:** If the Q&A section is empty or marked unavailable,
+  do NOT produce any quantitative claims (percentages, MAE values, error rates, etc.).
+  State only what is known from the gap description. If a number cannot be cited, omit it entirely.
 - Effort must be one of: Low / Medium / High.
 - On revision: address every specific critique from Som and Manao. State what you changed.
 
@@ -51,8 +55,20 @@ class NamAgent(BaseAgent):
         dao = self._read_handoff("dao")
         directions = state.get("pk_direction_selection", "")
 
+        nlm_empty = (
+            "NLM unavailable" in cherry
+            or "NotebookLM unavailable" in cherry
+            or "0 sources ready" in self._read_handoff("builder")
+        )
+        nlm_warning = (
+            "\n⚠ WARNING: NotebookLM returned no answers (0 sources loaded). "
+            "The Q&A below is empty. Do NOT produce quantitative claims. "
+            "Output gap analysis and conceptual directions only.\n"
+            if nlm_empty else ""
+        )
+
         user_parts = [
-            f"Q&A from NotebookLM:\n{cherry}",
+            f"{nlm_warning}Q&A from NotebookLM:\n{cherry}",
             f"\nKnowledge gap context:\n{dao}",
         ]
 

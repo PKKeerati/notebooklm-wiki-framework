@@ -1,9 +1,7 @@
-import json
 import re
 import time
-import urllib.parse
-import urllib.request
 from .base import BaseAgent
+from .utils import search_semantic_scholar, paper_citation, extract_search_keywords
 
 SYSTEM = """\
 You are Chompoo, the Literature Verifier in a research pipeline.
@@ -49,39 +47,6 @@ Output EXACTLY this Markdown:
 """
 
 
-def _search_semantic_scholar(query: str, limit: int = 5) -> list[dict]:
-    """Query Semantic Scholar API. Returns list of paper dicts."""
-    base = "https://api.semanticscholar.org/graph/v1/paper/search"
-    params = urllib.parse.urlencode({
-        "query": query,
-        "limit": limit,
-        "fields": "title,authors,year,externalIds,openAccessPdf,abstract",
-    })
-    url = f"{base}?{params}"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "notebooklm-wiki-pipeline/1.0"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-            return data.get("data", [])
-    except Exception:
-        return []
-
-
-def _paper_citation(paper: dict) -> str:
-    """Format a Semantic Scholar paper dict as a citation string."""
-    authors = paper.get("authors", [])
-    first_author = authors[0].get("name", "Unknown") if authors else "Unknown"
-    author_str = f"{first_author} et al." if len(authors) > 1 else first_author
-    year = paper.get("year", "n.d.")
-    title = paper.get("title", "Unknown title")
-    ext = paper.get("externalIds", {})
-    if ext.get("DOI"):
-        link = f"https://doi.org/{ext['DOI']}"
-    elif ext.get("ArXiv"):
-        link = f"https://arxiv.org/abs/{ext['ArXiv']}"
-    else:
-        link = ""
-    return f"{author_str} ({year}). {title}. {link}".strip()
 
 
 def _extract_done_insights(mod_handoff: str) -> list[dict]:
@@ -115,13 +80,13 @@ class ChompooAgent(BaseAgent):
         done_insights = [i for i in insights if i["status"].lower() == "done"]
         other_insights = [i for i in insights if i["status"].lower() != "done"]
 
-        # Search Semantic Scholar for each Done insight
+        # Search Semantic Scholar for each Done insight using keyword extraction
         search_results: list[dict] = []
         for insight in done_insights:
-            query = f"{insight['title']} {insight['fact'][:80]}"
-            print(f"  Searching: {insight['title'][:60]}...")
-            papers = _search_semantic_scholar(query, limit=5)
-            search_results.append({"insight": insight, "papers": papers})
+            query = extract_search_keywords(insight["title"], insight["fact"])
+            print(f"  Searching [{query[:50]}]...")
+            papers = search_semantic_scholar(query, limit=5)
+            search_results.append({"insight": insight, "papers": papers, "query": query})
             time.sleep(1)  # respect rate limit
 
         # Build user message for LLM
@@ -129,12 +94,14 @@ class ChompooAgent(BaseAgent):
         for item in search_results:
             ins = item["insight"]
             papers = item["papers"]
+            query = item.get("query", "")
             search_block += f"\n### Insight: {ins['title']}\n"
             search_block += f"Fact: {ins['fact']}\n"
+            search_block += f"Search query used: {query}\n"
             if papers:
                 search_block += "Search results:\n"
                 for p in papers:
-                    search_block += f"- {_paper_citation(p)}\n"
+                    search_block += f"- {paper_citation(p)}\n"
                     if p.get("abstract"):
                         search_block += f"  Abstract (first 150 chars): {p['abstract'][:150]}...\n"
             else:

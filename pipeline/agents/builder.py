@@ -3,19 +3,31 @@ import subprocess
 import sys
 from .base import BaseAgent
 
-# Matches table rows like: | 1 | some url or title | PDF/URL | reason |
-_SOURCE_ROW = re.compile(r"^\|\s*\d+\s*\|\s*(.+?)\s*\|\s*\S+\s*\|", re.MULTILINE)
+# Reads from Dao's "Verified source URLs" section — real URLs only, no LLM-invented IDs
+_VERIFIED_URL_ROW = re.compile(r"^\|\s*\d+\s*\|\s*(https?://\S+)\s*\|", re.MULTILINE)
 
+# Fallback: old-style table with possible bare arXiv IDs
+_SOURCE_ROW = re.compile(r"^\|\s*\d+\s*\|\s*(.+?)\s*\|\s*\S+\s*\|", re.MULTILINE)
 _ARXIV_ID = re.compile(r"^arXiv:(\d{4}\.\d{4,5})", re.IGNORECASE)
 
 
-def _normalise_source(src: str) -> str:
-    """Convert bare arXiv IDs to full URLs."""
-    src = src.strip()
-    m = _ARXIV_ID.match(src)
-    if m:
-        return f"https://arxiv.org/abs/{m.group(1)}"
-    return src
+def _extract_sources(dao_handoff: str) -> list[str]:
+    """Extract source URLs from Dao handoff — prefers verified section."""
+    # Try verified section first (new Dao format)
+    verified = _VERIFIED_URL_ROW.findall(dao_handoff)
+    if verified:
+        return list(dict.fromkeys(s.strip() for s in verified))  # deduplicate
+    # Fallback to old format with arXiv ID normalisation
+    sources = []
+    seen: set[str] = set()
+    for raw in _SOURCE_ROW.findall(dao_handoff):
+        src = raw.strip()
+        m = _ARXIV_ID.match(src)
+        url = f"https://arxiv.org/abs/{m.group(1)}" if m else src
+        if url not in seen and url.startswith("http"):
+            sources.append(url)
+            seen.add(url)
+    return sources
 
 
 def _run_notebooklm(*args: str, timeout: int = 300) -> tuple[int, str, str]:
@@ -33,7 +45,7 @@ def _run_notebooklm(*args: str, timeout: int = 300) -> tuple[int, str, str]:
 class BuilderAgent(BaseAgent):
     def run(self, state: dict) -> dict:
         dao_handoff = self._read_handoff("dao")
-        sources = _SOURCE_ROW.findall(dao_handoff)
+        sources = _extract_sources(dao_handoff)
 
         # Apply PK's edits from CP1 if any
         edits = state.get("source_edits", "")
@@ -66,7 +78,6 @@ class BuilderAgent(BaseAgent):
             src = src.strip()
             if not src:
                 continue
-            src = _normalise_source(src)
             rc, out, err = _run_notebooklm("source", "add", src, timeout=180)
             if rc == 0:
                 loaded.append({"num": i, "source": src, "status": "COMPLETED"})

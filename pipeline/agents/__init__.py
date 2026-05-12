@@ -5,9 +5,10 @@ from .nam import NamAgent
 from .som import SomAgent
 from .manao import ManaoAgent
 from .mod import ModAgent
+from .chompoo import ChompooAgent
 from .nanny import NannyAgent
 
 __all__ = [
     "DaoAgent", "BuilderAgent", "CherryAgent", "NamAgent",
-    "SomAgent", "ManaoAgent", "ModAgent", "NannyAgent",
+    "SomAgent", "ManaoAgent", "ModAgent", "ChompooAgent", "NannyAgent",
 ]

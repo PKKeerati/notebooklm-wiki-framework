@@ -4,17 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "132602e1a3815579",
+        "id": "0bc0553266bc97ed",
         "type": "tabs",
         "children": [
           {
-            "id": "2aa6a6bead7ad2b8",
+            "id": "5bfc6be2259a0825",
             "type": "leaf",
             "state": {
-              "type": "graph",
+              "type": "empty",
               "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "icon": "lucide-file",
+              "title": "New tab"
             }
           }
         ]
@@ -70,8 +70,7 @@
               "title": "Bookmarks"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "horizontal",
@@ -168,8 +167,8 @@
   },
   "left-ribbon": {
     "hiddenItems": {
-      "switcher:Open quick switcher": false,
       "graph:Open graph view": false,
+      "switcher:Open quick switcher": false,
       "canvas:Create new canvas": false,
       "daily-notes:Open today's daily note": false,
       "templates:Insert template": false,
@@ -177,39 +176,76 @@
       "bases:Create new base": false
     }
   },
-  "active": "2aa6a6bead7ad2b8",
+  "floating": {
+    "id": "bf9d66fffc8adc01",
+    "type": "floating",
+    "children": [
+      {
+        "id": "aa68cb170c4720ee",
+        "type": "window",
+        "children": [
+          {
+            "id": "5add1160c3c7083f",
+            "type": "tabs",
+            "children": [
+              {
+                "id": "169facbe1a682772",
+                "type": "leaf",
+                "state": {
+                  "type": "empty",
+                  "state": {},
+                  "icon": "lucide-file",
+                  "title": "New tab"
+                }
+              }
+            ]
+          }
+        ],
+        "direction": "vertical",
+        "x": 0,
+        "y": 0,
+        "width": 2560,
+        "height": 1440,
+        "maximize": false,
+        "zoom": 0
+      }
+    ]
+  },
+  "active": "169facbe1a682772",
   "lastOpenFiles": [
+    "Untitled.md",
+    "hub-electrochemistry.md",
+    "brief-2026-05-12.md",
+    "concepts/how-can-i-use-mlip-to-study-hydrogen-storage-in-ma-insights.md",
+    "concepts",
+    "hub-k-point-sampling.md",
+    "hub-ml-potentials.md",
+    "gaussian-process-model-for-extrapolation-of-scattering-obser.md",
+    "hub-ml-theory.md",
+    "hub-applied-mathematics.md",
+    "index.md",
+    "hub-index.md",
+    "hub-zt-enhancement.md",
+    "hub-young-tableaux.md",
+    "hub-young-tableau.md",
+    "hub-woodbury-lemma.md",
+    "hub-wigner-kernels.md",
+    "hub-wigner-eckhart-theorem.md",
+    "hub-wigner-d-matrix.md",
+    "hub-wigner-coefficients.md",
+    "hub-wave-function-symmetry.md",
+    "hub-vortices.md",
+    "hub-volatility-scaling.md",
+    "hub-volatility.md",
+    "hub-vo2.md",
+    "hub-vibronic-coupling.md",
+    "hub-vibrational-rotational-spectroscopy.md",
     "Untitled.canvas",
     "Untitled 8.canvas",
-    "8-323-relativistic-quantum-field-theory-i-lecture-notes-3-di.md",
-    "hub-quantum-theory.md",
-    "hub-phonons-and-anharmonicity.md",
-    "hub-perovskites.md",
-    "hub-gaussian-processes.md",
-    "hub-electrochemistry.md",
-    "accuracy-and-transferability-of-gaussian-approximation-poten.md",
-    "vectors.md",
-    "hub-proteins.md",
-    "hub-index.md",
-    "hub-molecules.md",
-    "hub-ml-potentials.md",
-    "hub-method-acceleration.md",
-    "hub-generative-models.md",
-    "hub-drug-discovery.md",
-    "hub-crystals-and-alloys.md",
-    "hub-2d-materials.md",
-    "2-1-phonons.md",
-    "ovgu_sign.md",
-    "ovgu_sign_druck-eps-converted-to-pdf.md",
     "Untitled 7.canvas",
-    "2026-05-12.md",
     "Untitled 6.canvas",
-    "index.md",
     "Untitled 5.canvas",
     "Untitled 4.canvas",
-    "XXXX_XX_[Inter-atomic]_1-Program-in-Applied-and-Computational-Mathematics-Princeton.md",
-    "XXXX_XX_[Unknown]_In-this-note-we-present-without-proofs-the-rules-necessary-t.md",
-    "2024_08_[Unknown]_Yang-2024-Nanotechnology-35-475403.md",
     "Untitled 3.canvas",
     "Untitled.base",
     "Untitled 2.canvas",

@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "132602e1a3815579",
+        "id": "0bc0553266bc97ed",
         "type": "tabs",
         "children": [
           {
-            "id": "2aa6a6bead7ad2b8",
+            "id": "077d65fe7201251c",
             "type": "leaf",
             "state": {
               "type": "graph",
@@ -177,8 +177,10 @@
       "bases:Create new base": false
     }
   },
-  "active": "2aa6a6bead7ad2b8",
+  "active": "077d65fe7201251c",
   "lastOpenFiles": [
+    "hub-applied-mathematics.md",
+    "index.md",
     "hub-index.md",
     "hub-zt-enhancement.md",
     "hub-young-tableaux.md",
@@ -203,8 +205,6 @@
     "hub-variational-inference.md",
     "hub-van-der-waals-heterostructures.md",
     "hub-validation.md",
-    "hub-unknown.md",
-    "hub-undergraduate-textbook.md",
     "Untitled.canvas",
     "Untitled 8.canvas",
     "Untitled 7.canvas",

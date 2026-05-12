@@ -41,20 +41,36 @@ INDEX_PATH   = WIKI_DIR / "index.md"
 
 # Domain taxonomy - edit to match your research
 TAXONOMY = {
-    "ML Potentials":          ["mace", "nequip", "chgnet", "schnet", "ace", "equivariant", "interatomic potential", "force field", "gaussian approximation potential", "gap potential", "atomic cluster expansion"],
-    "Method Acceleration":    ["dft", "active learning", "uncertainty quantification", "surrogate", "on-the-fly", "ab initio", "first principles", "density functional"],
-    "Generative Models":      ["diffusion", "flow matching", "vae", "inverse design", "generative model"],
+    # -- ML / simulation methods -----------------------------------------------
+    "ML Potentials":          ["mace", "nequip", "chgnet", "schnet", "ace", "equivariant", "interatomic potential", "force field", "gaussian approximation potential", "gap potential", "atomic cluster expansion", "neural network potential", "mlip", "universal potential"],
+    "Method Acceleration":    ["dft", "active learning", "uncertainty quantification", "surrogate", "on-the-fly", "ab initio", "first principles", "density functional", "kohn-sham", "vasp", "wien2k"],
+    "Generative Models":      ["diffusion", "flow matching", "vae", "inverse design", "generative model", "crystal generation", "periodic material"],
     "Drug Discovery":         ["ligand", "binding affinity", "admet", "drug discovery"],
-    "Crystals & Alloys":      ["crystal", "alloy", "high-entropy", "hea", "defect", "lattice", "bcc", "fcc", "solid solution"],
-    "Molecules":              ["molecular dynamics", "smiles", "conformer", "torsion", "molecular simulation", "charge transfer", "organic semiconductor", "electron coupling"],
-    "2D Materials":           ["mxene", "graphene", "monolayer", "heterostructure", "2d material"],
+
+    # -- Materials systems ------------------------------------------------------
+    "Crystals & Alloys":      ["crystal", "alloy", "high-entropy", "hea", "defect", "lattice", "bcc", "fcc", "solid solution", "intermetallic", "grain boundary"],
+    "Molecules":              ["molecular dynamics", "smiles", "conformer", "torsion", "molecular simulation", "organic semiconductor", "electron coupling", "transfer integral", "charge transport", "hopping", "mobility", "organic thin film", "pentacene", "reorganization energy"],
+    "2D Materials":           ["mxene", "graphene", "monolayer", "heterostructure", "2d material", "transition metal dichalcogenide", "moiré", "bilayer"],
     "Proteins":               ["peptide", "enzyme", "residue", "protein folding", "alphafold"],
-    "Phonons & Anharmonicity": ["phonon", "phonopy", "anharmonic", "anharmonicity", "thermal conductivity", "force constant", "brillouin", "phono3py", "lattice dynamics", "heat transport"],
-    "Perovskites":            ["perovskite", "halide", "solar cell", "photovoltaic", "thermoelectric", "methylammonium", "cesium lead", "lead iodide", "optoelectronic"],
-    "Electrochemistry":       ["battery", "oxygen reduction", "superoxide", "electrocatalyst", "orr", "oer", "metal-air", "li-air", "electrode", "potassium-oxygen", "overpotential"],
-    "Quantum Theory":         ["angular momentum", "wigner", "clebsch-gordan", "hamiltonian", "quantum field", "wave function", "spin", "commutator", "hilbert space", "quantum mechanics"],
-    "Gaussian Processes":     ["gaussian process", "gp regression", "kernel matrix", "bayesian optim", "acquisition function", "covariance function", "radial basis", "posterior mean"],
-    "Personal":               ["booking confirmation", "statement of registration", "tourist visa", "schengen", "seattle plan", "research proposal confirmation", "late stage review"],
+    "Perovskites":            ["perovskite", "halide", "solar cell", "photovoltaic", "thermoelectric", "methylammonium", "cesium lead", "lead iodide", "optoelectronic", "hybrid perovskite"],
+    "Glasses & Disorder":     ["glass", "amorphous", "boson peak", "disorder", "vibrational instability", "supercooled liquid", "liquid structure"],
+
+    # -- Physical phenomena -----------------------------------------------------
+    "Phonons & Anharmonicity": ["phonon", "phonopy", "anharmonic", "anharmonicity", "thermal conductivity", "force constant", "brillouin", "phono3py", "lattice dynamics", "heat transport", "thermal transport", "gruneisen"],
+    "Electrochemistry":       ["battery", "oxygen reduction", "superoxide", "electrocatalyst", "orr", "oer", "metal-air", "li-air", "electrode", "potassium-oxygen", "overpotential", "sodium-air", "na-o2", "k-o2", "electrolyte", "dendrite", "potassium superoxide"],
+    "Quantum Photonics":      ["photonics", "quantum optic", "photonic integrated", "quantum communication", "single photon", "optical circuit", "quantum light", "entanglement", "qubit", "laser"],
+
+    # -- Theory & mathematics --------------------------------------------------
+    "Quantum Theory":         ["angular momentum", "wigner", "clebsch-gordan", "hamiltonian", "quantum field", "wave function", "spin", "commutator", "hilbert space", "quantum mechanics", "tensor operator", "spherical harmonic", "young tableau", "irreducible representation", "hydrogen atom"],
+    "Group Theory":           ["group theory", "representation theory", "character table", "symmetry group", "point group", "space group", "lie group", "so(3)", "o(3)", "rotation group", "irreducible", "symmetric group"],
+    "Applied Mathematics":    ["complex number", "differential calculus", "integral", "vector calculus", "fourier", "laplace transform", "linear algebra", "eigenvalue", "tensor calculus", "kronecker"],
+
+    # -- Machine learning & statistics -----------------------------------------
+    "Gaussian Processes":     ["gaussian process", "gp regression", "kernel matrix", "bayesian optim", "acquisition function", "covariance function", "radial basis", "posterior mean", "gaussian cox", "kernel learning", "spectral mixture", "derivative gaussian", "gaussian process regression"],
+    "ML Theory":              ["neural network", "deep learning", "transformer", "graph neural", "message passing", "attention", "equivariant network", "invariant", "data-driven", "machine learning", "regression", "classification", "training", "benchmark"],
+
+    # -- Personal & admin ------------------------------------------------------
+    "Personal":               ["booking confirmation", "statement of registration", "tourist visa", "schengen", "seattle plan", "research proposal confirmation", "late stage review", "registration", "itinerary", "visa requirement", "travel document", "phd registration"],
 }
 
 
@@ -728,6 +744,72 @@ def link_pages(top_n: int = 5) -> None:
     print(f"  See Also links added/updated on {updated} pages.")
 
 
+# -- Orphan cleanup -----------------------------------------------------------
+
+def cleanup_orphans(force: bool = False) -> None:
+    """Remove wiki pages whose source PDF no longer exists in raw/."""
+    raw_pdfs = {p.name for p in RAW_DIR.glob("*.pdf")}
+
+    to_delete: list[Path] = []
+    skipped_no_source: list[str] = []
+
+    skip_stems = {"index", "hub-index"}
+
+    for page in sorted(WIKI_DIR.glob("*.md")):
+        if page.stem in skip_stems or page.stem.startswith("hub-"):
+            continue
+        content = page.read_text(encoding="utf-8", errors="ignore")
+        m = re.search(r"Source: `(.+?)`", content)
+        if not m:
+            skipped_no_source.append(page.name)
+            continue
+        source_pdf = m.group(1)
+        if source_pdf not in raw_pdfs:
+            to_delete.append(page)
+
+    if not to_delete:
+        print("Nothing to clean up — all wiki pages have a matching PDF in raw/.")
+        if skipped_no_source:
+            print(f"  Skipped {len(skipped_no_source)} pages with no Source footer (not touched).")
+        return
+
+    print(f"\nOrphaned wiki pages ({len(to_delete)}):")
+    for p in to_delete:
+        m = re.search(r"Source: `(.+?)`", p.read_text(encoding="utf-8", errors="ignore"))
+        src = m.group(1) if m else "?"
+        print(f"  {p.name}  ← {src}")
+
+    if skipped_no_source:
+        print(f"\nSkipping {len(skipped_no_source)} pages with no Source footer (kept as-is).")
+
+    if not force:
+        print()
+        confirm = input(f"Delete {len(to_delete)} page(s)? [y/N] ").strip().lower()
+        if confirm != "y":
+            print("Cancelled.")
+            return
+
+    # Delete pages
+    deleted_stems = set()
+    for page in to_delete:
+        page.unlink()
+        deleted_stems.add(page.stem)
+
+    # Clean .vectors.json
+    if VECTORS_PATH.exists():
+        try:
+            vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
+            before = len(vectors)
+            vectors = {k: v for k, v in vectors.items() if k not in deleted_stems}
+            VECTORS_PATH.write_text(json.dumps(vectors, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"  Removed {before - len(vectors)} entries from .vectors.json.")
+        except Exception as e:
+            print(f"  Warning: could not update .vectors.json — {e}", file=sys.stderr)
+
+    rebuild_index()
+    print(f"\nDone. {len(to_delete)} orphaned page(s) removed.")
+
+
 # -- Helpers ------------------------------------------------------------------
 
 def _require_env(name: str) -> str:
@@ -779,6 +861,9 @@ def main() -> None:
 
     sub.add_parser("make-hubs", help="Create category hub pages and add Categories links to all papers")
 
+    p_cleanup = sub.add_parser("cleanup", help="Remove wiki pages whose source PDF is no longer in raw/")
+    p_cleanup.add_argument("--force", action="store_true", help="Skip confirmation prompt")
+
     args = parser.parse_args()
 
     if args.command == "all":
@@ -798,6 +883,8 @@ def main() -> None:
         link_pages(top_n=args.top)
     elif args.command == "make-hubs":
         make_hubs()
+    elif args.command == "cleanup":
+        cleanup_orphans(force=args.force)
 
 
 if __name__ == "__main__":

@@ -3,4 +3,7 @@ mistralai
 pyyaml
 numpy
 requests
-# notebooklm: download zip and install — curl -L https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip -o /tmp/notebooklm.zip && pip install /tmp/notebooklm.zip
+# notebooklm: not on PyPI — install from GitHub:
+#   macOS/Linux:  curl -L https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip -o /tmp/notebooklm.zip && pip install /tmp/notebooklm.zip
+#   Windows (PowerShell): Invoke-WebRequest -Uri https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip -OutFile "$env:TEMP\notebooklm.zip"; pip install "$env:TEMP\notebooklm.zip"
+#   Any platform:  pip install https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip

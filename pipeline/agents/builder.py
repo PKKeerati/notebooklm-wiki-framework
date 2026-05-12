@@ -6,6 +6,17 @@ from .base import BaseAgent
 # Matches table rows like: | 1 | some url or title | PDF/URL | reason |
 _SOURCE_ROW = re.compile(r"^\|\s*\d+\s*\|\s*(.+?)\s*\|\s*\S+\s*\|", re.MULTILINE)
 
+_ARXIV_ID = re.compile(r"^arXiv:(\d{4}\.\d{4,5})", re.IGNORECASE)
+
+
+def _normalise_source(src: str) -> str:
+    """Convert bare arXiv IDs to full URLs."""
+    src = src.strip()
+    m = _ARXIV_ID.match(src)
+    if m:
+        return f"https://arxiv.org/abs/{m.group(1)}"
+    return src
+
 
 def _run_notebooklm(*args: str, timeout: int = 300) -> tuple[int, str, str]:
     """Run notebooklm CLI; return (returncode, stdout, stderr)."""
@@ -55,7 +66,8 @@ class BuilderAgent(BaseAgent):
             src = src.strip()
             if not src:
                 continue
-            rc, out, err = _run_notebooklm("source", "add", src, "--wait", timeout=180)
+            src = _normalise_source(src)
+            rc, out, err = _run_notebooklm("source", "add", src, timeout=180)
             if rc == 0:
                 loaded.append({"num": i, "source": src, "status": "COMPLETED"})
             else:

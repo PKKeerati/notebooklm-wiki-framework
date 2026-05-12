@@ -72,7 +72,7 @@ Install `notebooklm-py` from GitHub — it is not on PyPI (see `requirements.txt
 ### Agent Flow (pipeline/)
 
 ```
-Dao → Builder → Cherry → Nam → [Som ∥ Manao] → Mod → Nanny
+Dao → Builder → Cherry → Nam → [Som ∥ Manao] → Mod → Chompoo → Nanny
 ```
 
 The orchestrator (`pipeline/orchestrator.py`) is a state machine keyed on `state["current_step"]`. It saves state to `pipeline/pipeline_state.json` after every step so runs survive interruption. Som and Manao are always launched in parallel via `threading.Thread`.
@@ -82,7 +82,7 @@ The orchestrator (`pipeline/orchestrator.py`) is a state machine keyed on `state
 |----|-------|------------|
 | CP1 | Dao | Approve/edit/cancel source list |
 | CP2 | Nam | Pick 1–N research directions |
-| CP3 | Mod | Pick output format (report / slides / Obsidian / all) |
+| CP3 | Chompoo | Pick output format (report / slides / Obsidian / all) |
 
 Between checkpoints the pipeline runs without user input. If Som or Manao returns `REVISE`, Nam retries silently (max 2 attempts), then prompts PK if still failing.
 

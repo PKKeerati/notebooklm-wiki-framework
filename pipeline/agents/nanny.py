@@ -20,7 +20,8 @@ Structure:
 ## Knowledge Gaps
 ## Limitations
 ## Recommended Next Steps (Top 5 from Mod)
-## Atomic Insights (table: Fact | Status | Confidence)
+## Atomic Insights (table: Fact | Status | Confidence | Citation)
+  - Use citations from Chompoo. Mark unverified claims as ⚠ Unverified.
 ## Sources
 """
 
@@ -48,6 +49,7 @@ Structure:
 class NannyAgent(BaseAgent):
     def run(self, state: dict) -> dict:
         mod = self._read_handoff("mod")
+        chompoo = self._read_handoff("chompoo")
         nam = self._read_handoff("nam")
         cherry = self._read_handoff("cherry")
         dao = self._read_handoff("dao")
@@ -64,6 +66,7 @@ class NannyAgent(BaseAgent):
         context = (
             f"Run ID: {run_id}\nDate: {date}\n"
             f"PK notes: {pk_notes}\n\n"
+            f"Chompoo verified citations:\n{chompoo}\n\n"
             f"Mod handoff:\n{mod}\n\n"
             f"Nam synthesis:\n{nam}\n\n"
             f"Source list (from Dao):\n{dao}"

@@ -24,7 +24,7 @@ import anthropic
 from agents.base import PIPELINE_LLM_BACKEND
 from agents import (
     DaoAgent, BuilderAgent, CherryAgent, NamAgent,
-    SomAgent, ManaoAgent, ModAgent, NannyAgent,
+    SomAgent, ManaoAgent, ModAgent, ChompooAgent, NannyAgent,
 )
 
 PIPELINE_DIR = Path(__file__).parent
@@ -135,11 +135,12 @@ class Orchestrator:
             "cp2_approved":           self._step_review,
             "review_needs_revision":  self._step_nam_revision,
             "review_complete":        self._step_mod,
-            "mod_complete":           self._checkpoint_3,
+            "mod_complete":           self._step_chompoo,
+            "chompoo_complete":       self._checkpoint_3,
             "cp3_approved":           self._step_nanny,
         }
 
-        terminal = {"complete", "cancelled", "error", "paused"}
+        terminal = {"complete", "cancelled", "error", "paused", "awaiting_cp1", "awaiting_cp2", "awaiting_cp3"}
 
         while state["status"] not in terminal:
             fn = dispatch.get(state["current_step"])
@@ -296,6 +297,17 @@ class Orchestrator:
             _ok(f"KB pages created: {', '.join(created)}")
         return state
 
+    def _step_chompoo(self, state: dict) -> dict:
+        _step("Chompoo", "Verifying insights against Semantic Scholar...")
+        result = ChompooAgent(self.client, PIPELINE_DIR).run(state)
+        state.update(result)
+        state["current_step"] = "chompoo_complete"
+        state["completed_agents"].append("chompoo")
+        verified = result.get("chompoo_verified", 0)
+        total = result.get("chompoo_total_done", 0)
+        _ok(f"Citations verified: {verified}/{total}")
+        return state
+
     def _step_nanny(self, state: dict) -> dict:
         _step("Nanny", "Writing output...")
         result = NannyAgent(self.client, PIPELINE_DIR).run(state)
@@ -309,75 +321,79 @@ class Orchestrator:
 
     def _checkpoint_1(self, state: dict) -> dict:
         handoff_text = (HANDOFFS_DIR / "handoff_dao.md").read_text(encoding="utf-8")
-        _banner(1, "Source Plan Approval")
-        print(handoff_text)
-        print(_sep())
-        print("  A) Approve as-is")
-        print("  E) Edit source list (remove numbers or paste extra URLs)")
-        print("  C) Cancel")
-        print(_sep())
+        choice = state.pop("_cp1_response", None)
+        if choice is None:
+            _banner(1, "Source Plan Approval")
+            print(handoff_text)
+            print(_sep())
+            print("  Waiting for your response via 'respond' command.")
+            print(_sep())
+            state["status"] = "awaiting_cp1"
+            return state
 
-        while True:
-            choice = input("\n  Your choice: ").strip().upper()
-            if choice == "A":
-                state["checkpoint_history"]["cp1"] = {"presented": True, "approved": True}
-                state["current_step"] = "cp1_approved"
-                _ok("Source plan approved.")
-                return state
-            elif choice == "E":
-                edits = input("  Edits (e.g. 'remove 2,4' or paste URLs): ").strip()
-                state["source_edits"] = edits
-                state["checkpoint_history"]["cp1"] = {"presented": True, "approved": True, "edits": edits}
-                state["current_step"] = "cp1_approved"
-                _ok("Source plan edited.")
-                return state
-            elif choice == "C":
-                state["status"] = "cancelled"
-                state["current_step"] = "cancelled"
-                print("  Pipeline cancelled.")
-                return state
+        choice = choice.strip().upper()
+        _banner(1, "Source Plan Approval")
+        if choice == "A":
+            state["checkpoint_history"]["cp1"] = {"presented": True, "approved": True}
+            state["current_step"] = "cp1_approved"
+            _ok("Source plan approved.")
+        elif choice.startswith("E"):
+            edits = choice[1:].strip().lstrip(":").strip()
+            state["source_edits"] = edits
+            state["checkpoint_history"]["cp1"] = {"presented": True, "approved": True, "edits": edits}
+            state["current_step"] = "cp1_approved"
+            _ok(f"Source plan edited: {edits}")
+        elif choice == "C":
+            state["status"] = "cancelled"
+            state["current_step"] = "cancelled"
+            print("  Pipeline cancelled.")
+        return state
 
     def _checkpoint_2(self, state: dict) -> dict:
         handoff_text = (HANDOFFS_DIR / "handoff_nam.md").read_text(encoding="utf-8")
-        _banner(2, "Direction Selection")
-        print(handoff_text)
-        print(_sep())
-        print("  Select directions to pursue.")
-        print("  Examples:  '1,3'  |  'all'  |  '2: skip simulation part'")
-        print(_sep())
+        choice = state.pop("_cp2_response", None)
+        if choice is None:
+            _banner(2, "Direction Selection")
+            print(handoff_text)
+            print(_sep())
+            print("  Examples:  '1,3'  |  'all'  |  '2: skip simulation part'")
+            print("  Waiting for your response via 'respond' command.")
+            print(_sep())
+            state["status"] = "awaiting_cp2"
+            return state
 
-        while True:
-            choice = input("\n  Your selection: ").strip()
-            if choice:
-                state["pk_direction_selection"] = choice
-                state["checkpoint_history"]["cp2"] = {"presented": True, "approved": True, "selection": choice}
-                state["current_step"] = "cp2_approved"
-                _ok(f"Selected: {choice}")
-                return state
-            print("  Please enter at least one direction.")
+        _banner(2, "Direction Selection")
+        state["pk_direction_selection"] = choice.strip()
+        state["checkpoint_history"]["cp2"] = {"presented": True, "approved": True, "selection": choice}
+        state["current_step"] = "cp2_approved"
+        _ok(f"Selected: {choice}")
+        return state
 
     def _checkpoint_3(self, state: dict) -> dict:
         handoff_text = (HANDOFFS_DIR / "handoff_mod.md").read_text(encoding="utf-8")
-        _banner(3, "Output Format")
-        print(handoff_text)
-        print(_sep())
-        print("  A) Report only (Markdown)")
-        print("  B) Slides outline (Markdown / PPTX-ready)")
-        print("  C) Obsidian update only")
-        print("  D) Report + Obsidian")
-        print("  E) All of the above")
-        print("\n  Add notes after a colon, e.g. 'D: max 8 slides'")
-        print(_sep())
+        choice = state.pop("_cp3_response", None)
+        if choice is None:
+            _banner(3, "Output Format")
+            print(handoff_text)
+            print(_sep())
+            print("  A) Report only   B) Slides   C) Obsidian   D) Report+Obsidian   E) All")
+            print("  Waiting for your response via 'respond' command.")
+            print(_sep())
+            state["status"] = "awaiting_cp3"
+            return state
 
-        while True:
-            choice = input("\n  Your choice: ").strip()
-            if choice and choice[0].upper() in "ABCDE":
-                state["pk_output_format"] = choice
-                state["checkpoint_history"]["cp3"] = {"presented": True, "approved": True, "format": choice}
-                state["current_step"] = "cp3_approved"
-                _ok(f"Format: {choice}")
-                return state
-            print("  Please enter A, B, C, D, or E.")
+        fmt = choice.strip()
+        if not fmt or fmt[0].upper() not in "ABCDE":
+            _err(f"Invalid format choice '{fmt}'. Use A/B/C/D/E.")
+            state["status"] = "awaiting_cp3"
+            return state
+
+        _banner(3, "Output Format")
+        state["pk_output_format"] = fmt
+        state["checkpoint_history"]["cp3"] = {"presented": True, "approved": True, "format": fmt}
+        state["current_step"] = "cp3_approved"
+        _ok(f"Format: {fmt}")
+        return state
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -406,11 +422,39 @@ def _cmd_resume(_args: argparse.Namespace) -> None:
     if state["status"] == "complete":
         print("Last run is already complete. Use 'start' for a new run.")
         sys.exit(0)
+    if state["status"].startswith("awaiting_"):
+        cp = state["status"].replace("awaiting_", "").upper()
+        print(f"  Pipeline is paused at {cp}. Use 'respond <choice>' to continue.")
+        sys.exit(0)
     state["status"] = "running"
     print(_sep())
     print(f"  Resuming run: {state['run_id']}")
     print(f"  Question:     {state['pk_input']}")
     print(f"  From step:    {state['current_step']}")
+    print(_sep())
+    Orchestrator().run(state)
+
+
+def _cmd_respond(args: argparse.Namespace) -> None:
+    state = load_state()
+    if not state:
+        _err("No saved run found.")
+        sys.exit(1)
+    status = state.get("status", "")
+    cp_map = {
+        "awaiting_cp1": "_cp1_response",
+        "awaiting_cp2": "_cp2_response",
+        "awaiting_cp3": "_cp3_response",
+    }
+    key = cp_map.get(status)
+    if not key:
+        _err(f"Pipeline is not awaiting a checkpoint (status: {status}).")
+        sys.exit(1)
+    state[key] = args.choice
+    state["status"] = "running"
+    save_state(state)
+    print(_sep())
+    print(f"  Injecting response: {args.choice}")
     print(_sep())
     Orchestrator().run(state)
 
@@ -470,6 +514,10 @@ def main() -> None:
 
     p_reset = sub.add_parser("reset", help="Clear state and handoffs")
     p_reset.set_defaults(func=_cmd_reset)
+
+    p_respond = sub.add_parser("respond", help="Respond to a paused checkpoint")
+    p_respond.add_argument("choice", help="Your checkpoint response (e.g. 'A', '1,3', 'D')")
+    p_respond.set_defaults(func=_cmd_respond)
 
     args = parser.parse_args()
     args.func(args)

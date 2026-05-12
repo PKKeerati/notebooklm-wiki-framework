@@ -67,8 +67,9 @@ class BaseAgent:
                 return resp.choices[0].message.content
             except Exception as e:
                 if "429" in str(e) or "rate_limited" in str(e).lower():
-                    wait = 60 * (attempt + 1)
-                    print(f"  Rate limited — waiting {wait}s before retry {attempt + 1}/3...")
+                    import random
+                    wait = 60 * (attempt + 1) + random.uniform(0, 10)
+                    print(f"  Rate limited — waiting {wait:.0f}s before retry {attempt + 1}/3...")
                     time.sleep(wait)
                 else:
                     raise

@@ -423,14 +423,15 @@ class Orchestrator:
             _banner(3, "Output Format")
             print(handoff_text)
             print(_sep())
-            print("  A) Report only   B) Slides   C) Obsidian   D) Report+Obsidian   E) All")
+            print("  A) Report only   B) Slides   C) Obsidian   D) Report+Obsidian")
+            print("  E) All   F) Excalidraw   G) Report+Obsidian+Excalidraw   H) LaTeX")
             print("  Waiting for your response via 'respond' command.")
             print(_sep())
             state["status"] = "awaiting_cp3"
             return state
 
         fmt = choice.strip()
-        if not fmt or fmt[0].upper() not in "ABCDE":
+        if not fmt or fmt[0].upper() not in "ABCDEFGH":
             _err(f"Invalid format choice '{fmt}'. Use A/B/C/D/E.")
             state["status"] = "awaiting_cp3"
             return state

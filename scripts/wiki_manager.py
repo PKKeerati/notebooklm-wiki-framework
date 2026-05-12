@@ -4,10 +4,16 @@
 wiki_manager.py - Layer 1 KB builder for notebooklm-wiki-framework
 
 Commands:
-    python scripts/wiki_manager.py all                      # ingest all new PDFs in raw/
-    python scripts/wiki_manager.py ingest raw/paper.pdf     # ingest a single PDF
-    python scripts/wiki_manager.py query "search terms"     # search the KB
-    python scripts/wiki_manager.py index                    # rebuild wiki/index.md
+    python scripts/wiki_manager.py all                          # ingest all new PDFs in raw/
+    python scripts/wiki_manager.py ingest raw/paper.pdf        # ingest a single PDF
+    python scripts/wiki_manager.py ingest raw/paper.pdf --claims  # ingest + extract claims
+    python scripts/wiki_manager.py query "search terms"        # keyword search across the KB
+    python scripts/wiki_manager.py query "search terms" --semantic  # semantic (embedding) search
+    python scripts/wiki_manager.py index                        # rebuild wiki/index.md
+    python scripts/wiki_manager.py index-vectors               # build semantic embedding index
+    python scripts/wiki_manager.py lint                         # check for broken wikilinks & orphans
+    python scripts/wiki_manager.py export "OER catalysis" --format marp  # generate deliverable
+    python scripts/wiki_manager.py crystallize output/run/research.md    # distill mission → concept page
 
 Backend config (set here or override with env vars PDF_BACKEND / LLM_BACKEND):
     PDF_BACKEND: gemini | pymupdf | mistral
@@ -15,18 +21,23 @@ Backend config (set here or override with env vars PDF_BACKEND / LLM_BACKEND):
 """
 
 import argparse
+import hashlib
 import json
 import os
+import random
 import re
 import sys
 import time
+import yaml
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
 # -- Config -------------------------------------------------------------------
 
-PDF_BACKEND = os.environ.get("PDF_BACKEND", "pymupdf")  # pymupdf | gemini | mistral
-LLM_BACKEND = os.environ.get("LLM_BACKEND", "gemini")   # gemini | groq | anthropic | ollama | mistral
+PDF_BACKEND = os.environ.get("PDF_BACKEND", "pymupdf")   # pymupdf | gemini | mistral
+LLM_BACKEND = os.environ.get("LLM_BACKEND", "gemini")    # gemini | groq | anthropic | ollama | mistral
+EXTRACT_CLAIMS = os.environ.get("EXTRACT_CLAIMS", "0") == "1"  # set to "1" to enable per-PDF claim extraction
 
 # Gemini free tier: 15 requests/min. Sleep 4s between calls to stay safe.
 GEMINI_RATE_LIMIT_SLEEP = int(os.environ.get("GEMINI_SLEEP", "4"))
@@ -71,6 +82,14 @@ TAXONOMY = {
 
     # -- Personal & admin ------------------------------------------------------
     "Personal":               ["booking confirmation", "statement of registration", "tourist visa", "schengen", "seattle plan", "research proposal confirmation", "late stage review", "registration", "itinerary", "visa requirement", "travel document", "phd registration"],
+}
+
+# Domain-specific short acronyms to include in keyword matching (3-letter terms
+# missed by the 4+ char filter).
+_DOMAIN_SHORT_TERMS = {
+    "dft", "cvd", "kmc", "gnn", "mlp", "ace", "gap", "oer", "orr", "her",
+    "bcc", "fcc", "hcp", "dos", "bz", "md", "mc", "neb", "rdf", "xrd",
+    "eam", "vdw", "qm", "mm",
 }
 
 
@@ -242,8 +261,8 @@ def _llm_gemini(system: str, user: str) -> str:
             return resp.text
         except Exception as e:
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                wait = 60 * (attempt + 1)
-                print(f"  Rate limited - waiting {wait}s before retry {attempt + 1}/3...")
+                wait = 60 * (attempt + 1) + random.uniform(0, 10)
+                print(f"  Rate limited - waiting {wait:.0f}s before retry {attempt + 1}/3...")
                 time.sleep(wait)
             else:
                 raise
@@ -316,12 +335,62 @@ def _llm_mistral(system: str, user: str) -> str:
             return resp.choices[0].message.content
         except Exception as e:
             if "429" in str(e) or "rate_limited" in str(e).lower():
-                wait = 60 * (attempt + 1)
-                print(f"  Rate limited — waiting {wait}s before retry {attempt + 1}/3...")
+                wait = 60 * (attempt + 1) + random.uniform(0, 10)
+                print(f"  Rate limited — waiting {wait:.0f}s before retry {attempt + 1}/3...")
                 time.sleep(wait)
             else:
                 raise
     raise RuntimeError("Mistral rate limit exceeded after 3 retries.")
+
+
+# -- Claims extraction (ported from Repo B) -----------------------------------
+
+_CLAIMS_SYSTEM = """\
+You are a scientific claim extractor. Extract ALL precise claims from the paper excerpt.
+Output one claim per line in this exact format:
+[CATEGORY] <one precise sentence with numbers/LaTeX preserved>
+
+Categories (use exactly these labels):
+RESULT    — quantitative results, benchmark numbers, performance metrics
+TABLE     — data from tables (include all columns/values)
+METHOD    — computational or experimental parameters, software, functionals
+MECHANISM — reaction pathways, charge transfer, bonding mechanisms
+COMPARISON — comparisons between materials, methods, or conditions
+
+Rules:
+- Preserve all numbers, units, LaTeX formulas exactly as written
+- Do NOT paraphrase — use the paper's own language
+- Extract at least 20 claims if the text is long enough
+- Skip figure captions and reference lists
+"""
+
+_CATEGORY_CONFIDENCE = {
+    "RESULT": 0.95, "TABLE": 0.90, "METHOD": 0.85,
+    "MECHANISM": 0.80, "COMPARISON": 0.85,
+}
+
+
+def extract_claims(raw_text: str, title: str) -> list[dict]:
+    """Extract structured claims from paper text via LLM. Returns list of {fact, confidence, category}."""
+    user = f"**Paper:** {title}\n\n{raw_text[:12_000]}"
+    try:
+        raw = _llm_mistral(_CLAIMS_SYSTEM, user) if LLM_BACKEND == "mistral" else \
+              _llm_anthropic(_CLAIMS_SYSTEM, user) if LLM_BACKEND == "anthropic" else \
+              _llm_gemini(_CLAIMS_SYSTEM, user)
+    except Exception as e:
+        print(f"  [claim extraction failed: {e}]")
+        return []
+
+    claims = []
+    for line in raw.splitlines():
+        line = line.strip()
+        for cat, conf in _CATEGORY_CONFIDENCE.items():
+            if line.startswith(f"[{cat}]"):
+                fact = line[len(f"[{cat}]"):].strip()
+                if len(fact) > 10:
+                    claims.append({"fact": fact, "confidence": conf, "category": cat})
+                break
+    return claims
 
 
 # -- Wiki page writing --------------------------------------------------------
@@ -340,7 +409,7 @@ def _slug(text: str) -> str:
     return re.sub(r"[^\w]+", "-", text.lower()).strip("-")[:60]
 
 
-def write_wiki_page(structured: str, pdf_path: Path) -> Path:
+def write_wiki_page(structured: str, pdf_path: Path, claims: list | None = None) -> Path:
     WIKI_DIR.mkdir(exist_ok=True)
 
     title_m = re.search(r"^title:\s*(.+)$", structured, re.MULTILINE)
@@ -356,6 +425,19 @@ def write_wiki_page(structured: str, pdf_path: Path) -> Path:
         structured = re.sub(r"(tags:\s*)(.+)", _merge, structured)
     else:
         structured = structured.replace("type: paper", f"type: paper\ntags: {' '.join(auto_tags)}", 1)
+
+    # Inject claims into frontmatter if provided
+    if claims:
+        fm_end = structured.find("\n---\n", 4)
+        if fm_end > 0:
+            try:
+                fm_data = yaml.safe_load(structured[4:fm_end]) or {}
+                fm_data["claims"] = claims
+                new_fm = yaml.dump(fm_data, sort_keys=False, allow_unicode=True)
+                rest = structured[fm_end + 5:]
+                structured = f"---\n{new_fm}---\n{rest}"
+            except Exception:
+                pass  # Frontmatter parse failed — skip claims injection
 
     structured += f"\n\n---\n*Ingested: {datetime.now().strftime('%Y-%m-%d')} | Source: `{pdf_path.name}`*\n"
     page_path.write_text(structured, encoding="utf-8")
@@ -389,6 +471,127 @@ def update_vectors(page_path: Path, structured: str) -> None:
     }
 
     VECTORS_PATH.write_text(json.dumps(vectors, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+# -- Semantic vector index (ported from Repo B) --------------------------------
+
+_MISTRAL_EMBED_URL = "https://api.mistral.ai/v1/embeddings"
+_EMBED_MODEL = "mistral-embed"
+_SEM_VECTORS_PATH = WIKI_DIR / ".vectors-semantic.json"
+
+
+def _embed(text: str) -> list[float]:
+    """Call Mistral Embed API. Returns [] if unavailable."""
+    api_key = os.environ.get("MISTRAL_API_KEY")
+    if not api_key:
+        return []
+    import requests
+    try:
+        resp = requests.post(
+            _MISTRAL_EMBED_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": _EMBED_MODEL, "input": text[:4096]},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        return resp.json()["data"][0]["embedding"]
+    except Exception as e:
+        print(f"  [embed failed: {e}]")
+        return []
+
+
+def _content_hash(text: str) -> str:
+    return hashlib.sha1(text[:4000].encode("utf-8", errors="ignore")).hexdigest()
+
+
+def index_vectors_semantic() -> None:
+    """Build/update semantic embedding index (wiki/.vectors-semantic.json).
+
+    Uses SHA1 of content (not mtime) to skip unchanged pages.
+    Requires MISTRAL_API_KEY and numpy (pip install numpy).
+    """
+    try:
+        import numpy as np  # noqa: F401 — just a check
+    except ImportError:
+        print("  FAIL numpy not installed. Run: pip install numpy", file=sys.stderr)
+        sys.exit(1)
+
+    api_key = os.environ.get("MISTRAL_API_KEY")
+    if not api_key:
+        print("  FAIL MISTRAL_API_KEY not set — required for embeddings.", file=sys.stderr)
+        sys.exit(1)
+
+    print("Building semantic vector index (Mistral embeddings)...")
+    data: dict = {}
+    if _SEM_VECTORS_PATH.exists():
+        try:
+            data = json.loads(_SEM_VECTORS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    _fm_re = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
+    updated = skipped = 0
+
+    for f in sorted(WIKI_DIR.glob("**/*.md")):
+        if f.name in ("index.md",) or ".vectors" in f.name:
+            continue
+        content = f.read_text(encoding="utf-8", errors="ignore")
+        body = _fm_re.sub("", content, count=1).strip()
+        chash = _content_hash(body)
+
+        if f.name in data and data[f.name].get("hash") == chash:
+            skipped += 1
+            continue
+
+        vec = _embed(body)
+        if not vec:
+            print(f"  skip {f.name} (embed failed)")
+            continue
+
+        data[f.name] = {"vector": vec, "hash": chash, "title": f.stem}
+        updated += 1
+        print(f"  indexed {f.name}")
+        time.sleep(0.3)  # Gentle rate-limit padding
+
+    _SEM_VECTORS_PATH.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    print(f"  Semantic index updated: {updated} new, {skipped} unchanged.")
+
+
+def query_semantic(search: str, top_k: int = 10) -> None:
+    """Cosine-similarity search against the semantic embedding index."""
+    try:
+        import numpy as np
+    except ImportError:
+        print("  FAIL numpy not installed. Run: pip install numpy", file=sys.stderr)
+        sys.exit(1)
+
+    if not _SEM_VECTORS_PATH.exists():
+        print("No semantic index found. Run 'index-vectors' first.")
+        return
+
+    data = json.loads(_SEM_VECTORS_PATH.read_text(encoding="utf-8"))
+    q_vec = _embed(search)
+    if not q_vec:
+        print("  Embedding failed — falling back to keyword search.")
+        query_kb(search)
+        return
+
+    q = np.array(q_vec)
+    results = []
+    for fname, info in data.items():
+        d = np.array(info["vector"])
+        norm = np.linalg.norm(q) * np.linalg.norm(d)
+        sim = float(np.dot(q, d) / norm) if norm > 0 else 0.0
+        results.append((sim, info["title"], fname))
+
+    results.sort(reverse=True)
+    print(f"\nSemantic results for: '{search}'\n" + "-" * 56)
+    for sim, title, fname in results[:top_k]:
+        stem = Path(fname).stem
+        print(f"  [{sim:.3f}]  {title}")
+        print(f"         wiki/{stem}.md\n")
+
+    _log_operation("query-semantic", f"'{search[:80]}' → {min(top_k, len(results))} results")
 
 
 # -- Index rebuild ------------------------------------------------------------
@@ -425,7 +628,7 @@ def rebuild_index() -> None:
     print(f"  Index rebuilt: {len(pages) - 1} pages in {len(tagged)} topic(s).")
 
 
-# -- Query --------------------------------------------------------------------
+# -- Query (keyword) ----------------------------------------------------------
 
 def query_kb(search: str) -> None:
     if not VECTORS_PATH.exists():
@@ -438,7 +641,8 @@ def query_kb(search: str) -> None:
 
     for slug, meta in vectors.items():
         haystack = f"{meta['title']} {meta['tags']} {meta['keywords']} {meta['authors']}".lower()
-        score = sum(1 for t in terms if t in haystack)
+        # Use word-boundary matching to avoid "ml" matching "html"
+        score = sum(1 for t in terms if re.search(r"\b" + re.escape(t) + r"\b", haystack))
         if score > 0:
             results.append((score, meta["title"], meta.get("year", ""), meta.get("venue", ""), slug))
 
@@ -457,7 +661,7 @@ def query_kb(search: str) -> None:
 
 # -- Ingest pipeline ----------------------------------------------------------
 
-def ingest_pdf(pdf_path: Path) -> None:
+def ingest_pdf(pdf_path: Path, with_claims: bool = False) -> None:
     pdf_path = pdf_path.resolve()
     if not pdf_path.exists():
         print(f"FAIL File not found: {pdf_path}", file=sys.stderr)
@@ -476,8 +680,18 @@ def ingest_pdf(pdf_path: Path) -> None:
         print(f"  Cached to log/{log_path.name}")
 
     structured = structure_with_llm(raw_text, pdf_path.name)
-    page_path  = write_wiki_page(structured, pdf_path)
+
+    claims = None
+    if with_claims or EXTRACT_CLAIMS:
+        title_m = re.search(r"^title:\s*(.+)$", structured, re.MULTILINE)
+        title = title_m.group(1).strip() if title_m else pdf_path.stem
+        print(f"  Extracting claims [{LLM_BACKEND}]...")
+        claims = extract_claims(raw_text, title)
+        print(f"  {len(claims)} claims extracted.")
+
+    page_path = write_wiki_page(structured, pdf_path, claims=claims)
     update_vectors(page_path, structured)
+    _log_operation("ingest", f"{pdf_path.name} → wiki/{page_path.name}")
     print(f"  OK  wiki/{page_path.name}")
 
 
@@ -499,7 +713,7 @@ def ingest_all() -> None:
     failed = 0
     for pdf in new_pdfs:
         try:
-            ingest_pdf(pdf)
+            ingest_pdf(pdf, with_claims=EXTRACT_CLAIMS)
         except Exception as e:
             print(f"  FAIL  {pdf.name} - {e}", file=sys.stderr)
             failed += 1
@@ -562,7 +776,6 @@ def make_hubs() -> None:
     """Create one hub page per taxonomy category and add ## Categories links to every paper."""
     _skip_tags = {"#uncategorized", "#n/a", "#na", "#personal"}
 
-    # Scan ALL wiki page files directly — don't rely on vectors.json
     def _read_pages():
         for page_path in sorted(WIKI_DIR.glob("*.md")):
             if page_path.name == "index.md" or page_path.stem.startswith("hub-"):
@@ -649,7 +862,6 @@ def fix_tags() -> None:
         existing = set(tags_m.group(2).split())
         clean = {t for t in existing if t.lower() not in _BAD_TAGS}
         auto = set(_auto_tags(text))
-        # auto_tags returns ["#uncategorized"] if nothing matched — skip that
         if auto == {"#uncategorized"}:
             auto = set()
         merged = clean | auto or {"#uncategorized"}
@@ -675,10 +887,14 @@ def _tag_set(tags_str: str) -> set:
 
 def _keyword_tokens(meta: dict) -> set:
     raw = f"{meta['title']} {meta['keywords']}".lower()
-    tokens = set(re.findall(r"[a-z]{4,}", raw))
-    return tokens - {"with", "from", "that", "this", "they", "have", "been",
-                     "into", "their", "using", "based", "which", "more", "also",
-                     "than", "show", "such", "high", "both", "between", "model"}
+    long_tokens = set(re.findall(r"[a-z]{4,}", raw))
+    short_tokens = {w for w in raw.split() if w in _DOMAIN_SHORT_TERMS}
+    tokens = long_tokens | short_tokens
+    return tokens - {
+        "with", "from", "that", "this", "they", "have", "been",
+        "into", "their", "using", "based", "which", "more", "also",
+        "than", "show", "such", "high", "both", "between",
+    }
 
 
 def link_pages(top_n: int = 5) -> None:
@@ -718,9 +934,7 @@ def link_pages(top_n: int = 5) -> None:
         )
 
         text = page_path.read_text(encoding="utf-8")
-        # Remove old See Also section if present
         text = re.sub(r"\n\n## See Also\n.*", "", text, flags=re.DOTALL)
-        # Remove trailing ingestion footer, re-append after See Also
         footer_m = re.search(r"\n\n---\n\*Ingested:.*", text, re.DOTALL)
         footer = footer_m.group(0) if footer_m else ""
         body = text[:footer_m.start()] if footer_m else text
@@ -729,6 +943,179 @@ def link_pages(top_n: int = 5) -> None:
         updated += 1
 
     print(f"  See Also links added/updated on {updated} pages.")
+
+
+# -- Lint (ported from Repo B) ------------------------------------------------
+
+def lint() -> None:
+    """Find broken wikilinks and orphan pages in wiki/."""
+    pages = [f for f in WIKI_DIR.glob("*.md") if f.name != "index.md"]
+    all_stems = {p.stem for p in pages}
+    incoming: dict = defaultdict(set)
+    broken: list = []
+
+    for page in pages:
+        content = page.read_text(encoding="utf-8", errors="ignore")
+        links = re.findall(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]", content)
+        for link in links:
+            if link in all_stems:
+                incoming[link].add(page.stem)
+            else:
+                broken.append((page.stem, link))
+
+    orphans = [p.stem for p in pages if p.stem not in incoming]
+
+    print(f"\n=== Wiki Lint Report ===")
+    print(f"Total pages : {len(pages)}")
+    print(f"Broken links: {len(broken)}")
+    for page, link in broken[:30]:
+        print(f"  [[{link}]]  ←  in {page}")
+    if len(broken) > 30:
+        print(f"  ... and {len(broken) - 30} more")
+    print(f"\nOrphan pages (no incoming links): {len(orphans)}")
+    for o in orphans[:30]:
+        print(f"  {o}")
+    if len(orphans) > 30:
+        print(f"  ... and {len(orphans) - 30} more")
+
+    _log_operation("lint", f"{len(broken)} broken links, {len(orphans)} orphans")
+
+
+# -- Export (ported from Repo B) ----------------------------------------------
+
+_EXPORT_SYSTEMS = {
+    "marp": (
+        "Format as a complete Marp slide deck. Include YAML front matter "
+        "(marp: true, theme: gaia, size: 16:9, paginate: true). "
+        "Slides separated by ---. One key finding per slide with 4-6 bullet points. "
+        "Preserve all LaTeX. End with a Summary and Open Questions slide."
+    ),
+    "latex": (
+        "Format as LaTeX section content. Use \\section, \\subsection, itemize, "
+        "and equation environments. Preserve all math in $ or $$ delimiters. "
+        "Academic tone. Include a tabular environment for quantitative comparisons."
+    ),
+    "csv": (
+        "Format as CSV with header: Claim,Confidence,Category,Source\n"
+        "Extract all quantitative claims. One row per claim. "
+        "Escape commas with quotes. No extra text — CSV only."
+    ),
+    "report": (
+        "Format as an academic report section with full paragraphs. "
+        "Include: Overview, Current State of the Art, Quantitative Comparison, "
+        "Contradictions & Gaps, Strategic Outlook. Preserve all LaTeX."
+    ),
+}
+
+
+def export_kb(topic: str, fmt: str = "marp") -> None:
+    """Generate a deliverable (marp/latex/csv/report) from wiki knowledge on a topic."""
+    print(f"Exporting '{topic}' as {fmt}...")
+
+    pages_content = ""
+    count = 0
+    _fm_re = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
+
+    for f in WIKI_DIR.glob("*.md"):
+        if count >= 8:
+            break
+        content = f.read_text(encoding="utf-8", errors="ignore")
+        if not any(w.lower() in content.lower() for w in topic.split()):
+            continue
+
+        fm_match = _fm_re.match(content)
+        body = content[fm_match.end():].strip() if fm_match else content
+
+        # Prefer structured claims from frontmatter if present
+        claims: list = []
+        if fm_match:
+            try:
+                fm_data = yaml.safe_load(fm_match.group(0).strip("---\n")) or {}
+                claims = fm_data.get("claims", [])
+            except Exception:
+                pass
+
+        snippet = "\n".join(f"- {c['fact']}" for c in claims[:20]) if claims else body[:2000]
+        pages_content += f"\n\n### [[{f.stem}]]\n{snippet}"
+        count += 1
+
+    if not pages_content:
+        print("No relevant wiki pages found for this topic.")
+        return
+
+    system = _EXPORT_SYSTEMS.get(fmt, _EXPORT_SYSTEMS["report"])
+    llm_fn = {
+        "gemini": _llm_gemini, "groq": _llm_groq,
+        "anthropic": _llm_anthropic, "ollama": _llm_ollama, "mistral": _llm_mistral,
+    }.get(LLM_BACKEND, _llm_mistral)
+
+    result = llm_fn(system, f"Topic: {topic}\n\nWiki Knowledge:\n{pages_content}")
+
+    exports_dir = PROJECT_ROOT / "exports"
+    exports_dir.mkdir(exist_ok=True)
+    ext = {"marp": "md", "latex": "tex", "csv": "csv", "report": "md"}.get(fmt, "md")
+    out_path = exports_dir / f"{_slug(topic)}.{ext}"
+    out_path.write_text(result, encoding="utf-8")
+    _log_operation("export", f"'{topic}' as {fmt} → {out_path.name}")
+    print(f"  → {out_path}")
+
+
+# -- Crystallize (ported from Repo B) -----------------------------------------
+
+_CRYSTALLIZE_SYSTEM = """\
+You are a research crystallizer. Read this research mission file and distill
+the most important permanent insights for a knowledge base.
+
+Output a structured Markdown wiki page with:
+- YAML frontmatter: title, type: insight, date, tags (list), confidence (0.0–1.0)
+- ## Summary (3–5 sentences capturing the core finding)
+- ## Key Findings (bullet list, preserve all LaTeX)
+- ## Mechanisms (how/why it works)
+- ## Open Questions (speculative insights reframed as testable questions)
+- ## Related Pages (list of [[wikilinks]] to relevant wiki pages)
+
+Be precise and permanent — this page will be read by future research sessions.
+"""
+
+
+def crystallize(mission_file: str | None = None) -> None:
+    """Distill a mission/research file into a permanent wiki/concepts/ insight page."""
+    if mission_file:
+        path = Path(mission_file)
+    else:
+        # Auto-find most recent research_ file in output/
+        candidates = sorted(
+            (PROJECT_ROOT / "output").glob("**/research_*.md"), reverse=True
+        )
+        if not candidates:
+            print("No mission files found. Pass a path or run the pipeline first.")
+            return
+        path = candidates[0]
+
+    if not path.exists():
+        print(f"FAIL file not found: {path}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Crystallizing: {path.name} ...")
+    content = path.read_text(encoding="utf-8", errors="ignore")
+
+    llm_fn = {
+        "gemini": _llm_gemini, "groq": _llm_groq,
+        "anthropic": _llm_anthropic, "ollama": _llm_ollama, "mistral": _llm_mistral,
+    }.get(LLM_BACKEND, _llm_mistral)
+
+    result = llm_fn(_CRYSTALLIZE_SYSTEM, content[:15_000])
+
+    title_m = re.search(r"title:\s*[\"']?(.+?)[\"']?\s*\n", result)
+    title = title_m.group(1).strip() if title_m else path.stem
+    slug = _slug(title)
+
+    concepts_dir = WIKI_DIR / "concepts"
+    concepts_dir.mkdir(parents=True, exist_ok=True)
+    out_path = concepts_dir / f"{slug}.md"
+    out_path.write_text(result, encoding="utf-8")
+    _log_operation("crystallize", f"{path.name} → concepts/{slug}.md")
+    print(f"  → wiki/concepts/{slug}.md")
 
 
 # -- Orphan cleanup -----------------------------------------------------------
@@ -776,13 +1163,11 @@ def cleanup_orphans(force: bool = False) -> None:
             print("Cancelled.")
             return
 
-    # Delete pages
     deleted_stems = set()
     for page in to_delete:
         page.unlink()
         deleted_stems.add(page.stem)
 
-    # Clean .vectors.json
     if VECTORS_PATH.exists():
         try:
             vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
@@ -797,13 +1182,32 @@ def cleanup_orphans(force: bool = False) -> None:
     print(f"\nDone. {len(to_delete)} orphaned page(s) removed.")
 
 
+# -- Audit log ----------------------------------------------------------------
+
+def _log_operation(op_type: str, details: str) -> None:
+    """Append a row to wiki/.audit-log.md."""
+    log_path = WIKI_DIR / ".audit-log.md"
+    WIKI_DIR.mkdir(exist_ok=True)
+    if not log_path.exists():
+        log_path.write_text(
+            "# Audit Trail\n\n"
+            "| Timestamp | Operation | Details |\n"
+            "|-----------|-----------|---------|",
+            encoding="utf-8",
+        )
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    safe = details.replace("|", "∣").replace("\n", " ")[:150]
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(f"\n| {ts} | {op_type} | {safe} |")
+
+
 # -- Helpers ------------------------------------------------------------------
 
 def _require_env(name: str) -> str:
     val = os.environ.get(name)
     if not val:
         print(f"FAIL  {name} not set.", file=sys.stderr)
-        print(f"      Set it with:  $env:{name} = \"your-key-here\"", file=sys.stderr)
+        print(f"      Set it with:  export {name}=\"your-key-here\"", file=sys.stderr)
         sys.exit(1)
     return val
 
@@ -817,24 +1221,35 @@ def main() -> None:
         epilog=(
             "Examples:\n"
             "  python scripts/wiki_manager.py all\n"
-            "  python scripts/wiki_manager.py ingest raw/mace-paper.pdf\n"
+            "  python scripts/wiki_manager.py ingest raw/mace-paper.pdf --claims\n"
             "  python scripts/wiki_manager.py query 'equivariant ML potentials'\n"
-            "  python scripts/wiki_manager.py index\n\n"
+            "  python scripts/wiki_manager.py query 'MACE benchmark' --semantic\n"
+            "  python scripts/wiki_manager.py index-vectors\n"
+            "  python scripts/wiki_manager.py lint\n"
+            "  python scripts/wiki_manager.py export 'OER catalysis' --format marp\n"
+            "  python scripts/wiki_manager.py crystallize output/2026-05-12/research_*.md\n\n"
             "Backends (set env vars to override defaults):\n"
-            "  PDF_BACKEND=gemini|pymupdf|mistral   (default: gemini)\n"
-            "  LLM_BACKEND=gemini|groq|anthropic|ollama  (default: gemini)\n"
+            "  PDF_BACKEND=gemini|pymupdf|mistral   (default: pymupdf)\n"
+            "  LLM_BACKEND=gemini|groq|anthropic|ollama|mistral  (default: gemini)\n"
+            "  EXTRACT_CLAIMS=1  — enable claims extraction during ingest\n"
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("all",   help="Ingest all new PDFs from raw/")
     sub.add_parser("index", help="Rebuild wiki/index.md from existing pages")
+    sub.add_parser("index-vectors", help="Build semantic embedding index (requires MISTRAL_API_KEY + numpy)")
+    sub.add_parser("lint",  help="Check for broken wikilinks and orphan pages")
 
     p_ingest = sub.add_parser("ingest", help="Ingest a single PDF file")
     p_ingest.add_argument("pdf", help="Path to the PDF file")
+    p_ingest.add_argument("--claims", action="store_true",
+                          help="Extract structured claims from the paper (extra LLM call)")
 
-    p_query = sub.add_parser("query", help="Keyword search across the KB")
+    p_query = sub.add_parser("query", help="Search across the KB")
     p_query.add_argument("search", help="Search terms (quoted string)")
+    p_query.add_argument("--semantic", action="store_true",
+                         help="Use semantic (embedding) search instead of keyword matching")
 
     p_reingest = sub.add_parser("reingest", help="Re-ingest all PDFs, overwriting existing wiki pages")
     p_reingest.add_argument("--fresh", action="store_true",
@@ -851,17 +1266,33 @@ def main() -> None:
     p_cleanup = sub.add_parser("cleanup", help="Remove wiki pages whose source PDF is no longer in raw/")
     p_cleanup.add_argument("--force", action="store_true", help="Skip confirmation prompt")
 
+    p_export = sub.add_parser("export", help="Generate a deliverable from wiki knowledge on a topic")
+    p_export.add_argument("topic", help="Topic or research question to export")
+    p_export.add_argument("--format", "-f", default="marp",
+                          choices=["marp", "latex", "csv", "report"],
+                          help="Output format (default: marp)")
+
+    p_crystallize = sub.add_parser("crystallize", help="Distill a mission file into a permanent concept page")
+    p_crystallize.add_argument("file", nargs="?", help="Path to research mission markdown file (auto-detects latest if omitted)")
+
     args = parser.parse_args()
 
     if args.command == "all":
         ingest_all()
     elif args.command == "ingest":
-        ingest_pdf(Path(args.pdf))
+        ingest_pdf(Path(args.pdf), with_claims=args.claims)
         rebuild_index()
     elif args.command == "query":
-        query_kb(args.search)
+        if args.semantic:
+            query_semantic(args.search)
+        else:
+            query_kb(args.search)
     elif args.command == "index":
         rebuild_index()
+    elif args.command == "index-vectors":
+        index_vectors_semantic()
+    elif args.command == "lint":
+        lint()
     elif args.command == "reingest":
         reingest_all(fresh=args.fresh)
     elif args.command == "fix-tags":
@@ -872,6 +1303,10 @@ def main() -> None:
         make_hubs()
     elif args.command == "cleanup":
         cleanup_orphans(force=args.force)
+    elif args.command == "export":
+        export_kb(args.topic, fmt=args.format)
+    elif args.command == "crystallize":
+        crystallize(args.file)
 
 
 if __name__ == "__main__":

@@ -67,6 +67,31 @@ Requirements:
 Be comprehensive — every insight gets its own callout block with full context.
 """
 
+LATEX_SYSTEM = """\
+You are Nanny, the Output Writer. Produce a complete, compilable LaTeX research report.
+
+Requirements:
+- Use documentclass{article} with packages: geometry, hyperref, amsmath, amssymb, booktabs, graphicx, xcolor, parskip, microtype
+- geometry: a4paper, margin=2.5cm
+- Title block: \\title, \\author{Research Pipeline}, \\date
+- All formulas in proper LaTeX math mode (inline $...$ or display \\[ ... \\])
+- Use \\section, \\subsection for structure
+- Atomic insights table: booktabs style with columns Insight | Confidence | Status
+- Mark unverified claims with \\textcolor{red}{$\\dagger$}
+- End with a \\begin{thebibliography} block
+
+Structure:
+\\section{Abstract}
+\\section{Key Findings}  (one \\subsection per insight)
+\\section{Knowledge Gaps}
+\\section{Limitations}
+\\section{Recommended Next Steps}
+\\section{Atomic Insights}  (booktabs table)
+\\section{References}
+
+Output ONLY valid LaTeX — no markdown, no code fences.
+"""
+
 ABSTRACT_SYSTEM = """\
 Write a concise research brief (~400 words). Sections:
 1. Research Question (1 sentence)
@@ -110,10 +135,16 @@ class NannyAgent(BaseAgent):
 
         written: list[str] = []
 
-        if fmt in ("A", "D", "E"):
+        if fmt in ("A", "D", "E", "G"):
             report = self._llm(REPORT_SYSTEM, context, max_tokens=3000)
             path = output_dir / "report.md"
             path.write_text(report, encoding="utf-8")
+            written.append(str(path))
+
+        if fmt in ("H", "E"):
+            latex = self._llm(LATEX_SYSTEM, context, max_tokens=4000)
+            path = output_dir / "report.tex"
+            path.write_text(latex, encoding="utf-8")
             written.append(str(path))
 
         if fmt in ("B", "E"):
@@ -122,9 +153,27 @@ class NannyAgent(BaseAgent):
             path.write_text(slides, encoding="utf-8")
             written.append(str(path))
 
-        if fmt in ("C", "D", "E"):
+        if fmt in ("C", "D", "E", "G"):
             self._update_obsidian(state, mod, nam, date, output_dir)
             written.append("wiki/ (Obsidian updated)")
+
+        if fmt in ("F", "E", "G"):
+            try:
+                from .excalidraw_builder import build, write as excalidraw_write
+                diagram = build(
+                    topic=state["pk_input"],
+                    nam_handoff=nam,
+                    mod_handoff=mod,
+                    dao_handoff=dao,
+                    som_handoff=som,
+                    manao_handoff=manao,
+                    run_id=run_id,
+                )
+                ex_path = output_dir / "summary.excalidraw"
+                excalidraw_write(ex_path, diagram)
+                written.append(str(ex_path))
+            except Exception as e:
+                print(f"  ⚠ Excalidraw build failed: {e}")
 
         # Archive: full mission file with all agent handoffs
         ts = run_id.replace(":", "-").replace("T", "_")

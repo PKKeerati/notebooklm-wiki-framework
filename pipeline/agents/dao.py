@@ -92,10 +92,11 @@ class DaoAgent(BaseAgent):
         # Search Semantic Scholar with 3 targeted queries
         print(f"  Searching Semantic Scholar...")
         words = [w for w in pk_input.lower().split() if len(w) > 4]
+        # Third query: drop first word (often a verb) to widen scope
         queries = [
             pk_input,
             " ".join(words[:8]),
-            "machine learning interatomic potential benchmark",
+            " ".join(words[1:7]) if len(words) > 2 else pk_input,
         ]
 
         all_papers: dict[str, dict] = {}

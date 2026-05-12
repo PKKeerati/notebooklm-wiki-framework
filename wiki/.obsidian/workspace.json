@@ -11,10 +11,14 @@
             "id": "077d65fe7201251c",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "type": "markdown",
+              "state": {
+                "file": "hub-electrochemistry.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "hub-electrochemistry"
             }
           }
         ]
@@ -179,6 +183,13 @@
   },
   "active": "077d65fe7201251c",
   "lastOpenFiles": [
+    "brief-2026-05-12.md",
+    "concepts/how-can-i-use-mlip-to-study-hydrogen-storage-in-ma-insights.md",
+    "concepts",
+    "hub-k-point-sampling.md",
+    "hub-ml-potentials.md",
+    "gaussian-process-model-for-extrapolation-of-scattering-obser.md",
+    "hub-ml-theory.md",
     "hub-applied-mathematics.md",
     "index.md",
     "hub-index.md",
@@ -199,12 +210,6 @@
     "hub-vibrational-rotational-spectroscopy.md",
     "hub-vibrational-properties.md",
     "hub-vibrational-instability.md",
-    "hub-vectors.md",
-    "hub-vector-operators.md",
-    "hub-vasp.md",
-    "hub-variational-inference.md",
-    "hub-van-der-waals-heterostructures.md",
-    "hub-validation.md",
     "Untitled.canvas",
     "Untitled 8.canvas",
     "Untitled 7.canvas",

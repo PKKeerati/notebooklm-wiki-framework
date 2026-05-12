@@ -71,7 +71,7 @@ class ManaoAgent(BaseAgent):
         self._write_handoff("manao", handoff)
 
         verdict = "PASS"
-        m = re.search(r"VERDICT:\s*(PASS|REVISE)", handoff)
+        m = re.search(r"VERDICT:\s*(PASS|REVISE)", handoff, re.IGNORECASE)
         if m:
-            verdict = m.group(1)
+            verdict = m.group(1).upper()
         return {"manao_verdict": verdict}

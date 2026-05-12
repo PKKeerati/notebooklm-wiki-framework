@@ -8,17 +8,13 @@
         "type": "tabs",
         "children": [
           {
-            "id": "077d65fe7201251c",
+            "id": "5bfc6be2259a0825",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "hub-electrochemistry.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "hub-electrochemistry"
+              "title": "New tab"
             }
           }
         ]
@@ -74,8 +70,7 @@
               "title": "Bookmarks"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "horizontal",
@@ -181,8 +176,45 @@
       "bases:Create new base": false
     }
   },
-  "active": "077d65fe7201251c",
+  "floating": {
+    "id": "bf9d66fffc8adc01",
+    "type": "floating",
+    "children": [
+      {
+        "id": "aa68cb170c4720ee",
+        "type": "window",
+        "children": [
+          {
+            "id": "5add1160c3c7083f",
+            "type": "tabs",
+            "children": [
+              {
+                "id": "169facbe1a682772",
+                "type": "leaf",
+                "state": {
+                  "type": "empty",
+                  "state": {},
+                  "icon": "lucide-file",
+                  "title": "New tab"
+                }
+              }
+            ]
+          }
+        ],
+        "direction": "vertical",
+        "x": 0,
+        "y": 0,
+        "width": 2560,
+        "height": 1440,
+        "maximize": false,
+        "zoom": 0
+      }
+    ]
+  },
+  "active": "169facbe1a682772",
   "lastOpenFiles": [
+    "Untitled.md",
+    "hub-electrochemistry.md",
     "brief-2026-05-12.md",
     "concepts/how-can-i-use-mlip-to-study-hydrogen-storage-in-ma-insights.md",
     "concepts",
@@ -208,8 +240,6 @@
     "hub-vo2.md",
     "hub-vibronic-coupling.md",
     "hub-vibrational-rotational-spectroscopy.md",
-    "hub-vibrational-properties.md",
-    "hub-vibrational-instability.md",
     "Untitled.canvas",
     "Untitled 8.canvas",
     "Untitled 7.canvas",

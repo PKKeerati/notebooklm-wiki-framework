@@ -9,7 +9,7 @@
 A two-layer system that turns PK's research questions into structured, compounding knowledge — with minimal token cost and maximum autonomy.
 
 **Layer 1 — Permanent Brain** (`wiki/` + Obsidian)
-Compounding knowledge base built from research PDFs. Every paper adds to an interconnected graph of findings, methods, and concepts. Powered by Mistral OCR + embeddings.
+Compounding knowledge base built from research PDFs. Every paper adds to an interconnected graph of findings, methods, and concepts. Powered by Mistral OCR + embeddings + structured claims extraction.
 
 **Layer 2 — Exploration** (Google NotebookLM via `notebooklm-py`)
 Rich media generation: podcasts, quizzes, slide decks, multi-source chat. Discovers new papers. Feeds discoveries back into Layer 1.
@@ -23,11 +23,11 @@ The pipeline connects both layers through a multi-agent system that runs autonom
 ```
 PK: drops a research question
         │
-      [Dao]          Scans KB index, identifies gap, proposes sources
+      [Dao]          Scans KB index + Semantic Scholar, identifies gap, proposes sources
         │
    ── CP1 ──         PK approves source list
         │
-    [Builder]        Creates NotebookLM notebook, loads sources
+    [Builder]        Mistral OCR → log/ → wiki/; loads sources into NotebookLM
         │
     [Cherry]         Shapes questions, queries NotebookLM, blind-spot sweep
         │
@@ -35,13 +35,15 @@ PK: drops a research question
         │
    ── CP2 ──         PK picks which directions to pursue
         │
-  [Som ∥ Manao]      Critic + Fact audit in parallel
+  [Som ∥ Manao]      Logic critic + Fact auditor in parallel
         │
       [Mod]          Extracts atomic insights, writes to KB
         │
+    [Chompoo]        Formats and previews insights for CP3
+        │
    ── CP3 ──         PK picks output format
         │
-    [Nanny]          Writes report / slides / Obsidian update
+    [Nanny]          Writes report / slides / Obsidian update / Excalidraw / LaTeX
 ```
 
 **3 checkpoints only.** Everything else runs without interruption.
@@ -59,7 +61,7 @@ Open [`pipeline/pipeline_diagram.excalidraw`](pipeline/pipeline_diagram.excalidr
 |---|----------------|-------------|-------------|
 | **CP1** | Dao | Gap summary + proposed source list | Approve / edit sources / cancel |
 | **CP2** | Nam | Research doc + 5 directions (effort-rated) | Pick 1–N directions, optional note |
-| **CP3** | Mod | Atomic insights preview + KB diff | Pick output format + optional instructions |
+| **CP3** | Chompoo | Atomic insights preview + KB diff | Pick output format + optional instructions |
 
 Between checkpoints the pipeline runs unattended. Som and Manao run in parallel via threading. On a `REVISE` verdict, Nam retries silently (max 2 attempts). On the second failure PK gets a soft prompt: retry / proceed anyway / abort.
 
@@ -69,16 +71,32 @@ Between checkpoints the pipeline runs unattended. Som and Manao run in parallel 
 
 | Agent | Role | Output |
 |-------|------|--------|
-| **Dao** | Reads KB index, identifies knowledge gap, proposes sources | `handoff_dao.md` |
-| **Builder** | Creates NotebookLM notebook, loads sources via CLI | `handoff_builder.md` |
+| **Dao** | Reads KB index, Semantic Scholar search, identifies knowledge gap, proposes sources | `handoff_dao.md` |
+| **Builder** | Mistral OCR on matched PDFs, auto-promotes to wiki/, loads sources into NotebookLM | `handoff_builder.md` |
 | **Cherry** | Generates targeted questions, runs NLM Q&A + blind-spot sweep | `handoff_cherry.md` |
 | **Nam** | Synthesises Q&A into research doc + 5 strategic directions | `handoff_nam.md` |
-| **Som** | Critiques logic and argument quality (parallel) | `handoff_som.md` |
-| **Manao** | Fact-checks claims against Q&A and KB (parallel) | `handoff_manao.md` |
+| **Som** | Critiques logic and argument quality (parallel with Manao) | `handoff_som.md` |
+| **Manao** | Fact-checks claims against Q&A and KB (parallel with Som) | `handoff_manao.md` |
 | **Mod** | Extracts atomic insights, classifies Done/Ongoing/Not done, writes KB | `handoff_mod.md` |
-| **Nanny** | Writes report, slides, and/or Obsidian update | `output/[run_id]/` |
+| **Chompoo** | Formats atomic insights preview for CP3 display | `handoff_chompoo.md` |
+| **Nanny** | Writes selected output format(s) to `output/[run_id]/` | report / slides / Excalidraw / LaTeX |
 
 Full specification: [`AGENTS.md`](AGENTS.md) — Visual diagram: [`pipeline/pipeline_diagram.excalidraw`](pipeline/pipeline_diagram.excalidraw)
+
+---
+
+## CP3 Output Formats
+
+| Choice | Format | Files written |
+|--------|--------|---------------|
+| **A** | Report only | `report.md` |
+| **B** | Slides | `slides.md` (Marp-compatible) |
+| **C** | Obsidian only | Updates `wiki/` pages |
+| **D** | Report + Obsidian | `report.md` + wiki update |
+| **E** | All formats | All of the above + Excalidraw + LaTeX |
+| **F** | Excalidraw diagram | `summary.excalidraw` |
+| **G** | Report + Obsidian + Excalidraw | `report.md` + wiki update + `summary.excalidraw` |
+| **H** | LaTeX report | `report.tex` (compilable, booktabs style) |
 
 ---
 
@@ -157,6 +175,9 @@ pip install pymupdf          # free, recommended
 # pip install google-genai   # Gemini
 # pip install groq            # Groq
 # pip install mistralai       # Mistral (also used for OCR)
+
+# For semantic search:
+pip install numpy            # required for vector similarity
 ```
 
 ### Authenticate NotebookLM
@@ -228,6 +249,10 @@ python scripts/wiki_manager.py reingest --fresh
 
 # Ingest a single PDF:
 python scripts/wiki_manager.py ingest raw/paper.pdf
+
+# Ingest and extract structured claims (RESULT/METHOD/MECHANISM/TABLE/COMPARISON):
+EXTRACT_CLAIMS=1 python scripts/wiki_manager.py ingest raw/paper.pdf
+python scripts/wiki_manager.py ingest raw/paper.pdf --claims
 ```
 
 ### Maintain graph connectivity
@@ -254,11 +279,54 @@ python scripts/wiki_manager.py link
 python scripts/wiki_manager.py make-hubs
 ```
 
-### Semantic search across your KB
+### Search and query
 
 ```bash
+# Keyword search across KB:
 python scripts/wiki_manager.py query "message passing equivariant representations benchmark"
+
+# Semantic (embedding-based) search — requires MISTRAL_API_KEY + numpy:
+python scripts/wiki_manager.py query "message passing equivariant" --semantic
+
+# Build/rebuild the semantic vector index:
+python scripts/wiki_manager.py index-vectors
 ```
+
+### KB quality and export
+
+```bash
+# Detect broken wikilinks and orphan pages:
+python scripts/wiki_manager.py lint
+
+# Export KB claims to structured formats:
+python scripts/wiki_manager.py export "MACE benchmark"              # markdown report
+python scripts/wiki_manager.py export "equivariant" --format csv    # CSV
+python scripts/wiki_manager.py export "lattice dynamics" --format latex  # LaTeX table
+
+# Crystallise a mission/concept file into a wiki/concepts/ page:
+python scripts/wiki_manager.py crystallize docs/research_mission.md
+```
+
+---
+
+## Token Cost Estimates
+
+Approximate cost per full pipeline run using Anthropic Claude (claude-sonnet-4-6) at standard rates ($3/M input, $15/M output, $0.30/M cached):
+
+| Stage | ~Input tokens | ~Output tokens | Est. cost |
+|-------|--------------|----------------|-----------|
+| Dao (KB scan + Semantic Scholar) | 4 000 | 800 | $0.024 |
+| Builder | minimal (NLM CLI) | — | — |
+| Cherry (Q&A generation + sweep) | 3 000 | 1 200 | $0.027 |
+| Nam (synthesis) | 5 000 | 2 000 | $0.045 |
+| Som + Manao (parallel audit) | 3 000 × 2 | 800 × 2 | $0.042 |
+| Mod (insight extraction) | 4 000 | 1 000 | $0.027 |
+| Chompoo (preview format) | 2 000 | 600 | $0.015 |
+| Nanny (output writing) | 3 000–5 000 | 2 000–4 000 | $0.06–0.12 |
+| **Total per run** | | | **~$0.24–$0.30** |
+
+Cached system prompts (all agents) reduce repeated-run costs by ~60–70%.
+Switching to `PIPELINE_LLM_BACKEND=mistral` with `mistral-small-latest` cuts cost to ~$0.01–0.03 per run.
 
 ---
 
@@ -269,34 +337,78 @@ notebooklm-wiki-framework/
 ├── pipeline/
 │   ├── orchestrator.py        # Main runner — start/resume/status/reset
 │   ├── agents/
-│   │   ├── base.py            # BaseAgent: Anthropic client + prompt caching
-│   │   ├── dao.py             # Librarian
-│   │   ├── builder.py         # Notebook constructor
+│   │   ├── base.py            # BaseAgent: Anthropic/Mistral client + prompt caching
+│   │   ├── dao.py             # Librarian — KB scan + Semantic Scholar
+│   │   ├── builder.py         # Mistral OCR + auto-promote + NotebookLM loader
 │   │   ├── cherry.py          # Question shaper + NLM querier
 │   │   ├── nam.py             # Research synthesiser
 │   │   ├── som.py             # Logic critic
 │   │   ├── manao.py           # Fact auditor
 │   │   ├── mod.py             # Insight extractor + KB writer
-│   │   └── nanny.py           # Output writer
+│   │   ├── chompoo.py         # CP3 preview formatter
+│   │   ├── nanny.py           # Output writer (report/slides/Obsidian/Excalidraw/LaTeX)
+│   │   ├── excalidraw_builder.py  # Programmatic Excalidraw JSON generator
+│   │   └── utils.py           # Semantic Scholar search helpers
 │   ├── handoffs/              # Inter-agent files (gitignored)
 │   ├── pipeline_state.json    # Run state (gitignored)
 │   └── pipeline_diagram.excalidraw  # Visual pipeline map
 ├── scripts/
-│   ├── wiki_manager.py        # Layer 1: ingest / promote / categorize / query
-│   ├── mistral_ocr_client.py  # PDF extraction via Mistral OCR
-│   └── synthesize_concepts.py # Cross-source concept synthesis
+│   ├── wiki_manager.py        # Layer 1: ingest / promote / categorize / query / lint / export
+│   ├── mistral_ocr_client.py  # Standalone Mistral OCR client
+│   ├── synthesize_concepts.py # Cross-source concept synthesis
+│   └── auto_pilot.py          # Batch pipeline runner
 ├── raw/                       # Drop PDFs here (gitignored)
-├── log/                       # Intermediate extractions (gitignored)
+├── log/                       # Intermediate OCR extractions (gitignored)
 ├── wiki/                      # Knowledge base — open in Obsidian (gitignored)
 │   ├── hub-*.md               # Category hub pages (auto-generated by make-hubs)
+│   ├── concepts/              # Crystallised concept pages
 │   ├── index.md               # Auto-generated vault index (hidden from graph view)
+│   ├── .vectors.json          # Keyword embedding index (gitignored)
+│   ├── .vectors-semantic.json # Mistral semantic embedding index (gitignored)
+│   ├── .audit-log.md          # Agent write audit trail
 │   └── .obsidian/             # Obsidian config — tracked in git
 │       └── graph.json         # Graph settings: hub-and-spoke layout, index hidden
-├── output/                    # Pipeline reports and slides (gitignored)
+├── output/                    # Pipeline reports, slides, Excalidraw, LaTeX (gitignored)
 ├── AGENTS.md                  # Full agent specification
 ├── requirements.txt
 └── .gitignore
 ```
+
+---
+
+## Layer 1 — KB Features
+
+### Claims Extraction
+When `EXTRACT_CLAIMS=1` or `--claims` flag is set, each ingested paper runs an additional LLM pass that extracts structured claims into the YAML frontmatter:
+
+```yaml
+claims:
+  - fact: "MACE achieves 1.2 meV/Å MAE on MD17 ethanol"
+    confidence: high
+    category: RESULT
+  - fact: "equivariant message passing scales as O(N·k) with k neighbours"
+    confidence: medium
+    category: METHOD
+```
+
+Categories: `RESULT` · `TABLE` · `METHOD` · `MECHANISM` · `COMPARISON`
+
+These claims are queryable via `export` and used by Mod when writing the KB.
+
+### Semantic Search
+Builds a Mistral `mistral-embed` vector index (`wiki/.vectors-semantic.json`) keyed by SHA1 content hash — so re-indexing only processes changed pages. The pipeline's `graph_search` uses this as its primary ranking signal, with a multi-hop wikilink traversal bonus (hop-1: +30% of seed score, hop-2: +15%).
+
+### Audit Trail
+Every Mod write and Builder auto-promote is appended to `wiki/.audit-log.md` with timestamp, agent, operation, and details. Enables PK to review what the pipeline added or changed.
+
+### Lint
+`wiki_manager.py lint` detects broken `[[wikilinks]]` (target page missing) and orphan pages (no incoming links). Reports counts per page — useful before sharing or publishing the vault.
+
+### Export
+`wiki_manager.py export [topic]` collects all claims matching a topic from the KB and renders them as a markdown report, CSV table, or LaTeX table. Useful for assembling evidence for a paper or presentation without re-running the full pipeline.
+
+### Crystallize
+`wiki_manager.py crystallize [file]` distils a research mission or concept document into a structured wiki page saved to `wiki/concepts/`. Creates a citable, wikilink-connected entry from freeform notes.
 
 ---
 
@@ -343,12 +455,14 @@ Each agent reads only what it needs — never the full KB:
 
 | Agent | Reads |
 |-------|-------|
-| Dao | `wiki/index.md` + vector titles only |
-| Cherry | Handoffs + NotebookLM answers (sources stay in NLM) |
+| Dao | `wiki/index.md` (3 000 chars) + hub pages (800 chars × 6) + vector titles only |
+| Builder | Mistral OCR output + cached log/ files |
+| Cherry | Builder handoff + NotebookLM answers (sources stay in NLM) |
 | Som / Manao | Nam's handoff + Cherry's Q&A |
-| Mod | Approved handoffs + targeted wiki pages |
+| Mod | Approved handoffs + targeted wiki pages (wikilink-referenced only) |
+| Nanny | Mod + Chompoo handoffs + selected format context |
 
-All agent system prompts use **prompt caching** (`cache_control: ephemeral`). Repeated runs on the same topic cost significantly less.
+All agent system prompts use **prompt caching** (`cache_control: ephemeral`). Repeated runs on the same topic cost ~60–70% less.
 
 ---
 
@@ -361,6 +475,7 @@ All agent system prompts use **prompt caching** (`cache_control: ephemeral`). Re
 python scripts/wiki_manager.py fix-tags   # clean up taxonomy tags
 python scripts/wiki_manager.py link       # cross-link related pages
 python scripts/wiki_manager.py make-hubs  # rebuild hub-and-spoke graph
+python scripts/wiki_manager.py index-vectors  # rebuild semantic search index
 ```
 
 **Weekly deep-dive:**
@@ -368,13 +483,17 @@ python scripts/wiki_manager.py make-hubs  # rebuild hub-and-spoke graph
 python pipeline/orchestrator.py start "Compare MACE vs NequIP vs CHGNet on MD accuracy"
 # → CP1: approve sources
 # → CP2: pick directions (e.g. "1,3")
-# → CP3: pick output (e.g. "D: report + obsidian")
+# → CP3: pick output (e.g. "G: report + obsidian + excalidraw")
 ```
 
-**Stay current:**
+**Export evidence for a paper:**
 ```bash
-notebooklm source add-research "equivariant neural network potentials 2025" --mode deep
-# → review discovered papers → drop PDFs in raw/ → ingest
+python scripts/wiki_manager.py export "equivariant message passing" --format latex
+```
+
+**Batch run multiple questions:**
+```bash
+python scripts/auto_pilot.py questions.txt   # runs pipeline for each line
 ```
 
 ---

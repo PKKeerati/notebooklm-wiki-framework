@@ -624,21 +624,8 @@ def make_hubs() -> None:
         page_path.write_text(text, encoding="utf-8")
         updated += 1
 
-    # Write meta-hub
-    meta_lines = [
-        "---\ntitle: Research Knowledge Base\ntype: hub\n---\n\n",
-        "# Research Knowledge Base\n\n",
-        "*Top-level hub — links to all research clusters.*\n\n",
-        "## Clusters\n\n",
-    ]
-    for tag in sorted(hub_slugs):
-        count = len(tag_papers.get(tag, []))
-        meta_lines.append(f"- [[{hub_slugs[tag]}|{_hub_display_name(tag)}]] ({count} papers)\n")
-    (WIKI_DIR / "hub-index.md").write_text("".join(meta_lines), encoding="utf-8")
-
     print(f"\n  {len(hub_slugs)} category hubs created: wiki/hub-*.md")
     print(f"  Categories section added to {updated} paper pages.")
-    print(f"  Meta-hub: wiki/hub-index.md")
 
 
 # -- Tag cleanup --------------------------------------------------------------

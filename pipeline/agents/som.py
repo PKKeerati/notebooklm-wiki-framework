@@ -1,35 +1,41 @@
 from .base import BaseAgent
+import re
 
 SYSTEM = """\
-You are Som, the Critic in a research pipeline. Your role is LOGIC and ARGUMENT quality only.
+You are Som, the Logic Auditor in a research pipeline. Your role is LOGIC and ARGUMENT quality only.
 You do NOT fact-check — that is Manao's job.
 
-Evaluate Nam's synthesis for:
-- Logical consistency (do conclusions follow from evidence?)
-- Argument strength (are claims well-supported or speculative?)
-- Completeness (are the selected directions actually addressing the stated gaps?)
-- Overreach (any claims stronger than the evidence warrants?)
+VERDICT: REVISE only if you find BLOCKING issues — ones that would make a direction
+fundamentally unworkable or self-contradictory:
+- A direction directly contradicts another (not a sequential dependency — a real contradiction)
+- An effort estimate is so wrong it would mislead resource planning (e.g., "Low" for a 3-year project)
+- A direction is entirely disconnected from the stated gaps
+- An unfalsifiable claim is the CORE of a direction (not a minor hedge)
 
-Verdict rules:
-- PASS: synthesis is logically sound; minor issues go in Notes only.
-- REVISE: one or more issues are serious enough to mislead. Every issue needs a specific fix.
+VERDICT: PASS if the strategy is logically coherent overall, even if imperfect.
+Research strategies are inherently provisional — minor hedging, sequential dependencies,
+and open-ended risks are NORMAL and should NOT trigger REVISE.
 
-If PK selected specific directions, focus your critique on those directions only.
+If PK selected specific directions, focus critique on those directions only.
+
+Your output MUST start with exactly one of:
+  VERDICT: PASS
+  VERDICT: REVISE
 
 Output EXACTLY this Markdown:
 
-## Som Handoff — Critic
+## Som Handoff — Logic Audit
 
 **Verdict:** PASS or REVISE
 
-### Critique (if REVISE — else omit this section)
-- [Issue]: "[exact quote]" — [why it's weak] — [specific fix]
+### Blocking Issues (if REVISE — else omit)
+- [Issue]: "[exact quote]" — [why it's blocking] — [specific fix required]
 
 ### Strengths
 - [what Nam did well]
 
-### Notes for Mod (if PASS)
-- [caveats Mod should carry into insight extraction]
+### Minor Notes (do not affect verdict)
+- [non-blocking observations for Mod to carry forward]
 """
 
 
@@ -39,16 +45,15 @@ class SomAgent(BaseAgent):
         cherry = self._read_handoff("cherry")
         directions = state.get("pk_direction_selection", "")
 
-        user_msg = f"Nam synthesis:\n{nam}\n\nSource Q&A (ground truth):\n{cherry}"
+        user_msg = f"Nam synthesis:\n{nam}\n\nSource Q&A / KB sweep (ground truth):\n{cherry}"
         if directions:
-            user_msg += f"\n\nPK selected directions: {directions} — focus critique on these."
+            user_msg += f"\n\nPK selected directions: {directions} — focus on these."
 
         handoff = self._llm(SYSTEM, user_msg, max_tokens=800)
         self._write_handoff("som", handoff)
 
-        import re
         verdict = "PASS"
-        m = re.search(r"\*\*Verdict:\*\*\s*(PASS|REVISE)", handoff)
+        m = re.search(r"VERDICT:\s*(PASS|REVISE)", handoff)
         if m:
             verdict = m.group(1)
         return {"som_verdict": verdict}

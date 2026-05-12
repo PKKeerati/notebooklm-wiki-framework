@@ -17,6 +17,22 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+# Load API keys from ~/.bash_env if not already in environment
+_bash_env = Path.home() / ".bash_env"
+if _bash_env.exists():
+    for _line in _bash_env.read_text().splitlines():
+        if _line.startswith("export ") and "=" in _line:
+            _k, _, _v = _line[len("export "):].partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"'))
+
+# Also load from .env in the project root
+_dot_env = Path(__file__).parent.parent / ".env"
+if _dot_env.exists():
+    for _line in _dot_env.read_text().splitlines():
+        if _line.strip() and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip())
+
 # Resolve imports whether run as script or module
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -315,6 +331,37 @@ class Orchestrator:
         state["current_step"] = "nanny_complete"
         state["status"] = "complete"
         state["completed_agents"].append("nanny")
+
+        # Auto-crystallize into wiki/concepts/ only when audit passed
+        som_ok = state.get("som_verdict", "PASS") == "PASS"
+        manao_ok = state.get("manao_verdict", "PASS") == "PASS"
+        if som_ok and manao_ok:
+            _step("Crystallize", "Auto-writing insights to wiki/concepts/...")
+            try:
+                sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+                from wiki_manager import WikiManager
+                mgr = WikiManager()
+                if hasattr(mgr, "crystallize"):
+                    run_id = state["run_id"].replace(":", "-").replace("T", "_")
+                    output_dir = PROJECT_ROOT / "output" / state["run_id"][:10]
+                    research_path = output_dir / f"research_{run_id}.md"
+                    if research_path.exists():
+                        mgr.crystallize(str(research_path))
+                        _ok("Crystallized into wiki/concepts/")
+                    else:
+                        _ok("wiki/concepts/ already updated by Mod")
+            except Exception as e:
+                _warn(f"Crystallize skipped: {e}")
+        else:
+            _warn("Audit verdict was REVISE — crystallize skipped. Review and run manually.")
+
+        output_dir = PROJECT_ROOT / "output" / state["run_id"][:10]
+        print(f"\n{_sep()}")
+        print(f"  Pipeline complete.")
+        print(f"  Output → {output_dir}/")
+        for f in sorted(output_dir.glob("*.md")) if output_dir.exists() else []:
+            print(f"    {f.name}")
+        print(_sep())
         return state
 
     # ── Checkpoints ───────────────────────────────────────────────────────────
@@ -476,8 +523,14 @@ def _cmd_status(_args: argparse.Namespace) -> None:
     print(_sep())
 
 
-def _cmd_reset(_args: argparse.Namespace) -> None:
-    confirm = input("Reset deletes current state and all handoffs. Confirm? [y/N] ")
+def _cmd_reset(args: argparse.Namespace) -> None:
+    if getattr(args, "yes", False):
+        confirm = "y"
+    elif sys.stdin.isatty():
+        confirm = input("Reset deletes current state and all handoffs. Confirm? [y/N] ")
+    else:
+        _err("Reset requires --yes flag when running non-interactively.")
+        sys.exit(1)
     if confirm.strip().lower() == "y":
         if STATE_FILE.exists():
             STATE_FILE.unlink()
@@ -513,6 +566,7 @@ def main() -> None:
     p_status.set_defaults(func=_cmd_status)
 
     p_reset = sub.add_parser("reset", help="Clear state and handoffs")
+    p_reset.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
     p_reset.set_defaults(func=_cmd_reset)
 
     p_respond = sub.add_parser("respond", help="Respond to a paused checkpoint")

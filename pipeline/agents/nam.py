@@ -4,7 +4,7 @@ from .base import BaseAgent
 SYSTEM = """\
 You are Nam, the Research Synthesizer in a materials science / ML pipeline.
 
-Given a Q&A document from NotebookLM and a knowledge gap description, produce:
+Given Q&A from NotebookLM (or a KB claims sweep) and a knowledge gap description, produce:
 1. A 4-6 sentence research summary.
 2. A list of knowledge gaps (3-6 bullets).
 3. A list of limitations (2-4 bullets).
@@ -13,11 +13,18 @@ Given a Q&A document from NotebookLM and a knowledge gap description, produce:
 Rules:
 - Every claim must be traceable to the Q&A or the gap description.
 - If you cannot support a claim, remove it — do not hedge.
-- **CRITICAL — No invented numbers:** If the Q&A section is empty or marked unavailable,
-  do NOT produce any quantitative claims (percentages, MAE values, error rates, etc.).
-  State only what is known from the gap description. If a number cannot be cited, omit it entirely.
+- **CRITICAL — No invented numbers:** If Q&A is empty or marked unavailable,
+  do NOT produce quantitative claims. State only what is known from the gap description.
 - Effort must be one of: Low / Medium / High.
 - On revision: address every specific critique from Som and Manao. State what you changed.
+
+Each direction must include:
+- **Title** — short, descriptive
+- **Description** — 1 sentence
+- **Effort** — Low / Medium / High
+- **Rationale** — why this direction matters given the gaps
+- **Key Risk** — the single most likely failure mode
+- **Addresses** — which Cherry blind spot or gap this targets
 
 Output EXACTLY this Markdown:
 
@@ -35,9 +42,9 @@ Output EXACTLY this Markdown:
 - [limitation]
 
 ### Top 5 Strategic Directions
-| # | Direction | Description | Effort | Rationale |
-|---|-----------|-------------|--------|-----------|
-| 1 | ...       | 1 sentence  | Low/Med/High | why |
+| # | Direction | Description | Effort | Rationale | Key Risk |
+|---|-----------|-------------|--------|-----------|----------|
+| 1 | ... | 1 sentence | Low/Med/High | why | main risk |
 | 2 | ...
 | 3 | ...
 | 4 | ...
@@ -68,7 +75,7 @@ class NamAgent(BaseAgent):
         )
 
         user_parts = [
-            f"{nlm_warning}Q&A from NotebookLM:\n{cherry}",
+            f"{nlm_warning}Q&A from NotebookLM / KB sweep:\n{cherry}",
             f"\nKnowledge gap context:\n{dao}",
         ]
 
@@ -84,6 +91,6 @@ class NamAgent(BaseAgent):
             user_parts.append(f"\nPK selected directions: {directions}")
 
         system = SYSTEM.replace("{revision}", str(revision))
-        handoff = self._llm(system, "\n".join(user_parts), max_tokens=1500)
+        handoff = self._llm(system, "\n".join(user_parts), max_tokens=2000)
         self._write_handoff("nam", handoff)
         return {}

@@ -1,7 +1,7 @@
 # AGENTS.md — Multi-Agent Research Pipeline Spec
 
 > Design specification for the NotebookLM-Wiki research intelligence pipeline.
-> **Status:** Spec only — no code implemented yet.
+> **Status:** Fully implemented — all agents in `pipeline/agents/`, orchestrator in `pipeline/orchestrator.py`.
 
 ---
 

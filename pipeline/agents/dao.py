@@ -19,6 +19,7 @@ You are given REAL papers retrieved from Semantic Scholar. Your job:
 
 Quality rules:
 - Only select from the provided search results — do not invent or add papers not in the list.
+- Each URL must appear only once. Never repeat the same URL in multiple rows.
 - Do not list GitHub repos or database URLs.
 - Flag paywalled papers and prefer the open-access/arXiv URL when available.
 
@@ -71,23 +72,33 @@ class DaoAgent(BaseAgent):
             except Exception:
                 pass
 
-        # Search Semantic Scholar with 2-3 targeted queries
+        # Search Semantic Scholar with targeted queries derived from PK's question
         pk_input = state["pk_input"]
         print(f"  Searching Semantic Scholar...")
-        queries = [pk_input, f"equivariant machine learning interatomic potential", f"high entropy alloy machine learning potential benchmark"]
-        # Make queries specific to the actual question
+
+        # Build 3 queries: specific, broad architecture, broad application
+        words = pk_input.lower().split()
+        queries = [
+            pk_input,                                          # exact question
+            " ".join(w for w in words if len(w) > 4)[:80],   # key words only
+            "machine learning interatomic potential benchmark",
+        ]
+
         all_papers: dict[str, dict] = {}
-        for q in queries[:3]:
-            results = search_semantic_scholar(q, limit=10)
+        seen_urls: set[str] = set()
+        for q in queries:
+            results = search_semantic_scholar(q, limit=12)
             for p in results:
                 pid = p.get("paperId", "")
-                if pid and pid not in all_papers and paper_url(p):
+                url = paper_url(p)
+                if pid and pid not in all_papers and url and url not in seen_urls:
                     all_papers[pid] = p
+                    seen_urls.add(url)
             time.sleep(1)
 
-        papers_list = list(all_papers.values())[:25]
+        papers_list = list(all_papers.values())[:20]
         papers_block = format_papers_for_llm(papers_list) if papers_list else "[No search results — KB only]"
-        print(f"  Found {len(papers_list)} real papers from Semantic Scholar.")
+        print(f"  Found {len(papers_list)} unique real papers from Semantic Scholar.")
 
         user_msg = (
             f"PK's question: {pk_input}\n"

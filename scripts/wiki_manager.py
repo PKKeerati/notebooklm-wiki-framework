@@ -19,6 +19,7 @@ Backend config (set here or override with env vars PDF_BACKEND / LLM_BACKEND):
     PDF_BACKEND: gemini | pymupdf | mistral
     LLM_BACKEND: gemini | groq | anthropic | ollama | mistral
 """
+from __future__ import annotations
 
 import argparse
 import hashlib

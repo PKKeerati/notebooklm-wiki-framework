@@ -11,6 +11,7 @@ Layout (top → bottom):
   Proposed Workflow (numbered steps)
   Audit verdict badge
 """
+from __future__ import annotations
 import json
 import re
 import textwrap

@@ -4,17 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "0bc0553266bc97ed",
+        "id": "31274a132c0064c0",
         "type": "tabs",
         "children": [
           {
-            "id": "5bfc6be2259a0825",
+            "id": "646a880d877d4054",
             "type": "leaf",
             "state": {
-              "type": "empty",
+              "type": "graph",
               "state": {},
-              "icon": "lucide-file",
-              "title": "New tab"
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
             }
           }
         ]
@@ -176,43 +176,10 @@
       "bases:Create new base": false
     }
   },
-  "floating": {
-    "id": "bf9d66fffc8adc01",
-    "type": "floating",
-    "children": [
-      {
-        "id": "aa68cb170c4720ee",
-        "type": "window",
-        "children": [
-          {
-            "id": "5add1160c3c7083f",
-            "type": "tabs",
-            "children": [
-              {
-                "id": "169facbe1a682772",
-                "type": "leaf",
-                "state": {
-                  "type": "empty",
-                  "state": {},
-                  "icon": "lucide-file",
-                  "title": "New tab"
-                }
-              }
-            ]
-          }
-        ],
-        "direction": "vertical",
-        "x": 0,
-        "y": 0,
-        "width": 2560,
-        "height": 1440,
-        "maximize": false,
-        "zoom": 0
-      }
-    ]
-  },
-  "active": "169facbe1a682772",
+  "active": "646a880d877d4054",
   "lastOpenFiles": [
+    "Untitled 1",
+    "Untitled",
     "Untitled.md",
     "hub-electrochemistry.md",
     "brief-2026-05-12.md",
@@ -239,7 +206,6 @@
     "hub-volatility.md",
     "hub-vo2.md",
     "hub-vibronic-coupling.md",
-    "hub-vibrational-rotational-spectroscopy.md",
     "Untitled.canvas",
     "Untitled 8.canvas",
     "Untitled 7.canvas",

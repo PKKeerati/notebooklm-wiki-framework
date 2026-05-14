@@ -17,6 +17,12 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+# Force UTF-8 I/O on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # Load API keys from ~/.bash_env if not already in environment
 _bash_env = Path.home() / ".bash_env"
 if _bash_env.exists():
@@ -125,7 +131,7 @@ class Orchestrator:
                 _err("MISTRAL_API_KEY not set. Export it and retry.")
                 sys.exit(1)
             try:
-                from mistralai.client import Mistral
+                from mistralai import Mistral
             except ImportError:
                 _err("mistralai not installed. Run: pip install mistralai")
                 sys.exit(1)

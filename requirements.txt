@@ -1,4 +1,5 @@
 anthropic>=0.40.0
+python-dotenv
 mistralai
 pyyaml
 numpy

@@ -30,6 +30,18 @@ import re
 import sys
 import time
 import yaml
+from pathlib import Path as _Path
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
+
+# Force UTF-8 I/O on Windows (handles Unicode chars in filenames/output)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -45,7 +57,7 @@ GEMINI_RATE_LIMIT_SLEEP = int(os.environ.get("GEMINI_SLEEP", "4"))
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
 PROJECT_ROOT = Path(__file__).parent.parent
-RAW_DIR      = PROJECT_ROOT / "raw"
+RAW_DIR      = PROJECT_ROOT / os.environ.get("RAW_DIR", "raw")
 WIKI_DIR     = PROJECT_ROOT / "wiki"
 LOG_DIR      = PROJECT_ROOT / "log"
 VECTORS_PATH = WIKI_DIR / ".vectors.json"
@@ -80,6 +92,47 @@ TAXONOMY = {
     # -- Machine learning & statistics -----------------------------------------
     "Gaussian Processes":     ["gaussian process", "gp regression", "kernel matrix", "bayesian optim", "acquisition function", "covariance function", "radial basis", "posterior mean", "gaussian cox", "kernel learning", "spectral mixture", "derivative gaussian", "gaussian process regression"],
     "ML Theory":              ["neural network", "deep learning", "transformer", "graph neural", "message passing", "attention", "equivariant network", "invariant", "data-driven", "machine learning", "regression", "classification", "training", "benchmark"],
+
+    # -- Hydrogen storage — materials ------------------------------------------
+    "Hydrogen Storage Materials": [
+        "hydrogen storage", "metal hydride", "solid-state hydrogen", "mgh2", "magnesium hydride",
+        "libh4", "nabh4", "libh4", "complex hydride", "borohydride", "alanate", "amide",
+        "lani5", "tife", "ab2", "ab5", "bcc alloy", "high entropy alloy hydrogen",
+        "palladium hydride", "titanium hydride", "zirconium hydride", "vanadium hydride",
+        "intermetallic hydride", "gravimetric capacity", "volumetric capacity", "wt% hydrogen",
+        "hydrogen desorption", "hydrogen absorption", "destabilization", "catalytic additive",
+        "nanoconfinement", "reversible hydrogen", "hydrogen capacity",
+    ],
+
+    # -- Hydrogen storage — simulations ----------------------------------------
+    "H2 Storage Simulations": [
+        "grand canonical monte carlo", "gcmc", "widom insertion", "hydrogen adsorption simulation",
+        "calphad", "van't hoff", "thermodynamic model hydrogen", "enthalpy of formation hydride",
+        "reaction enthalpy", "phase diagram hydrogen", "reaxff hydrogen", "reactive molecular dynamics",
+        "nudged elastic band", "activation barrier hydrogen", "diffusion hydrogen",
+        "dft hydrogen", "first principles hydrogen", "high-throughput screening hydride",
+        "computational screening hydrogen", "machine learning hydrogen", "ml hydrogen storage",
+    ],
+
+    # -- Hydrogen storage — experiments ----------------------------------------
+    "H2 Storage Experiments": [
+        "pressure-composition isotherm", "pct curve", "sievert", "temperature programmed desorption",
+        "tpd hydrogen", "activation procedure", "hydrogenation kinetics", "dehydrogenation kinetics",
+        "cycling stability", "hydrogen cycling", "ball milling hydrogen", "melt spinning",
+        "xrd hydrogen", "neutron diffraction hydrogen", "synchrotron hydrogen",
+        "tem hydrogen", "in situ hydrogen", "calorimetry hydrogen", "dsc hydrogen",
+        "hydrogen purity", "tank system", "on-board storage",
+    ],
+
+    # -- Porous materials for H2 -----------------------------------------------
+    "Porous H2 Adsorbents": [
+        "metal-organic framework hydrogen", "mof hydrogen", "hydrogen uptake mof",
+        "physisorption hydrogen", "cryogenic hydrogen", "liquid hydrogen",
+        "carbon adsorbent hydrogen", "activated carbon hydrogen", "zeolite hydrogen",
+        "porous carbon hydrogen", "hydrogen adsorption isotherm", "langmuir hydrogen",
+        "bet surface area hydrogen", "microporous hydrogen", "high pressure hydrogen",
+        "70 mpa", "700 bar", "cryo-adsorption",
+    ],
 
     # -- Personal & admin ------------------------------------------------------
     "Personal":               ["booking confirmation", "statement of registration", "tourist visa", "schengen", "seattle plan", "research proposal confirmation", "late stage review", "registration", "itinerary", "visa requirement", "travel document", "phd registration"],

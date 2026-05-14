@@ -10,7 +10,7 @@
 This pipeline converts PK's research questions into structured, persistent knowledge — with minimal token cost and maximum autonomy. PK interacts at 3 checkpoints only. Everything else runs without interruption.
 
 **Agents (in order):**
-Dao → Builder → Cherry → Nam → [Som ∥ Manao] → Mod → Nanny
+Dao → Builder → Cherry → Nam → [Som ∥ Manao] → Mod → Chompoo → Nanny
 
 **Implemented as:** Claude Code subagents (Agent tool), orchestrated by `pipeline/orchestrator.py`.
 
@@ -59,6 +59,8 @@ PK: idea / question
               └── 2nd fail → notify PK (soft)  │
                                                ▼
                                             [Mod]  ── extracts atomic insights, writes KB
+                                               │
+                                         [Chompoo]  ── verifies Done insights via Semantic Scholar
                                                │
                                         ╔═══ CP3 ════╗  PK picks output format
                                                │
@@ -517,6 +519,62 @@ notebooklm ask "What important aspects of [topic] did the above answers NOT cove
 
 ---
 
+### Chompoo — Literature Verifier
+
+**Role:** For every "Done" atomic insight from Mod, search Semantic Scholar to find a real published paper that supports the claim and attach a full citation. Insights that cannot be matched are marked Unverified. "Ongoing" and "Not done" insights pass through unchanged.
+
+**Entry condition:** Mod completes successfully.
+
+**Reads:**
+- `pipeline/handoffs/handoff_mod.md`
+
+**Actions:**
+- Parses all `#### [Insight title]` blocks from Mod's handoff.
+- For each **Done** insight: calls `search_semantic_scholar(query, limit=5)` using keywords extracted from the insight title and fact. Sleeps 1 s between calls to respect rate limits.
+- Passes search results + insight to the LLM for citation matching.
+
+**Writes:**
+- `pipeline/handoffs/handoff_chompoo.md`
+
+**Output schema (`handoff_chompoo.md`):**
+```markdown
+## Chompoo Handoff — Literature Verification
+
+**Verified:** N / Done: M
+
+### Verified Insights
+#### [Insight title]
+- **Fact:** [original fact from Mod]
+- **Status:** Done
+- **Citation:** Authors et al. (Year). Title. DOI/arXiv URL
+- **Match confidence:** High / Medium
+- **Notes:** [optional]
+
+### Unverified Insights
+#### [Insight title]
+- **Fact:** [original fact]
+- **Status:** Done
+- **Citation:** Unverified — no supporting paper found
+- **Search terms used:** [query sent to Semantic Scholar]
+
+### Ongoing / Not Done Insights
+#### [Insight title]
+- **Fact:** [original fact]
+- **Status:** Ongoing / Not done
+- **Est. completion:** [year]
+- **Confidence:** [original]
+```
+
+**Token budget:** ~1,500 tokens in, ~600 tokens out. Semantic Scholar API is free.
+
+**Constraints:**
+- Match confidence HIGH = title/abstract clearly supports the claim; MEDIUM = partial match.
+- Only mark VERIFIED if confidence is HIGH or MEDIUM. Never invent citations.
+- Do not search for or modify Ongoing / Not done insights.
+- Report `chompoo_verified` (count of verified insights) and `chompoo_total_done` back to the orchestrator state.
+
+---
+
 ### Nanny — Output Writer
 
 **Role:** Produce the final deliverable in PK's chosen format and update Obsidian.
@@ -525,6 +583,7 @@ notebooklm ask "What important aspects of [topic] did the above answers NOT cove
 
 **Reads:**
 - `pipeline/handoffs/handoff_mod.md`
+- `pipeline/handoffs/handoff_chompoo.md` (citations — marks ⚠ Unverified where absent)
 - `pipeline/handoffs/handoff_nam.md`
 - `pipeline/handoffs/handoff_cherry.md` (for sourcing)
 - PK's format choice + notes from CP3
@@ -609,7 +668,8 @@ All files live in `pipeline/handoffs/`. Cleared at the start of each new run.
 | `handoff_nam.md` | Nam | Som, Manao, Mod |
 | `handoff_som.md` | Som | Nam (revision), Mod |
 | `handoff_manao.md` | Manao | Nam (revision), Mod |
-| `handoff_mod.md` | Mod | Nanny |
+| `handoff_mod.md` | Mod | Chompoo, Nanny |
+| `handoff_chompoo.md` | Chompoo | Nanny |
 | `handoff_nanny.md` | Nanny | Nam (PK feedback re-entry) |
 
 ---
@@ -664,7 +724,8 @@ File: `pipeline/orchestrator.py`
 | Som | `handoff_nam.md`, `handoff_cherry.md` | `handoff_som.md` | — |
 | Manao | `handoff_nam.md`, `handoff_cherry.md`, selective wiki pages | `handoff_manao.md` | — |
 | Mod | `handoff_nam.md`, `handoff_som.md`, `handoff_manao.md`, `wiki/index.md`, selective wiki pages | `handoff_mod.md`, `wiki/**` | `wiki_manager.py categorize` |
-| Nanny | `handoff_mod.md`, `handoff_nam.md`, `handoff_cherry.md` | `output/**`, `wiki/index.md` | — |
+| Chompoo | `handoff_mod.md` | `handoff_chompoo.md` | Semantic Scholar API (via `utils.py`) |
+| Nanny | `handoff_mod.md`, `handoff_chompoo.md`, `handoff_nam.md`, `handoff_cherry.md` | `output/**`, `wiki/index.md` | — |
 
 *On revision or re-entry only.*
 
@@ -678,4 +739,4 @@ Run IDs use ISO 8601 format: `YYYY-MM-DDTHH:MM:SS`.
 
 ---
 
-*Spec version: 0.1 — Implementation pending.*
+*Spec version: 0.2 — Fully implemented. All agents in `pipeline/agents/`, orchestrator in `pipeline/orchestrator.py`.*

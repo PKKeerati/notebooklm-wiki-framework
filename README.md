@@ -39,7 +39,7 @@ PK: drops a research question
         │
       [Mod]          Extracts atomic insights, writes to KB
         │
-    [Chompoo]        Formats and previews insights for CP3
+    [Chompoo]        Verifies Done insights against Semantic Scholar, attaches citations
         │
    ── CP3 ──         PK picks output format
         │
@@ -61,7 +61,7 @@ Open [`pipeline/pipeline_diagram.excalidraw`](pipeline/pipeline_diagram.excalidr
 |---|----------------|-------------|-------------|
 | **CP1** | Dao | Gap summary + proposed source list | Approve / edit sources / cancel |
 | **CP2** | Nam | Research doc + 5 directions (effort-rated) | Pick 1–N directions, optional note |
-| **CP3** | Chompoo | Atomic insights preview + KB diff | Pick output format + optional instructions |
+| **CP3** | Chompoo | Mod's atomic insights + KB pages updated | Pick output format + optional instructions |
 
 Between checkpoints the pipeline runs unattended. Som and Manao run in parallel via threading. On a `REVISE` verdict, Nam retries silently (max 2 attempts). On the second failure PK gets a soft prompt: retry / proceed anyway / abort.
 
@@ -78,7 +78,7 @@ Between checkpoints the pipeline runs unattended. Som and Manao run in parallel 
 | **Som** | Critiques logic and argument quality (parallel with Manao) | `handoff_som.md` |
 | **Manao** | Fact-checks claims against Q&A and KB (parallel with Som) | `handoff_manao.md` |
 | **Mod** | Extracts atomic insights, classifies Done/Ongoing/Not done, writes KB | `handoff_mod.md` |
-| **Chompoo** | Formats atomic insights preview for CP3 display | `handoff_chompoo.md` |
+| **Chompoo** | Searches Semantic Scholar for each Done insight; attaches real citations or marks Unverified | `handoff_chompoo.md` |
 | **Nanny** | Writes selected output format(s) to `output/[run_id]/` | report / slides / Excalidraw / LaTeX |
 
 Full specification: [`AGENTS.md`](AGENTS.md) — Visual diagram: [`pipeline/pipeline_diagram.excalidraw`](pipeline/pipeline_diagram.excalidraw)
@@ -180,11 +180,34 @@ pip install pymupdf          # free, recommended
 pip install numpy            # required for vector similarity
 ```
 
+### Install notebooklm-py (not on PyPI — install from GitHub)
+
+```bash
+# Any platform:
+pip install https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip
+
+# macOS / Linux:
+curl -L https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip -o /tmp/notebooklm.zip && pip install /tmp/notebooklm.zip
+
+# Windows (PowerShell):
+Invoke-WebRequest -Uri https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip -OutFile "$env:TEMP\notebooklm.zip"; pip install "$env:TEMP\notebooklm.zip"
+```
+
 ### Authenticate NotebookLM
 ```bash
 notebooklm login
 ```
 This opens a browser for Google OAuth and saves credentials locally.
+
+### Store API keys in .env (optional)
+
+The orchestrator auto-loads a `.env` file at the project root, so you can store keys there instead of setting environment variables each session:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+MISTRAL_API_KEY=...
+GEMINI_API_KEY=...
+```
 
 ### Set environment variables
 
@@ -218,6 +241,26 @@ python pipeline/orchestrator.py status
 
 # Clear state for a fresh start
 python pipeline/orchestrator.py reset
+```
+
+Checkpoints pause the pipeline and print `Waiting for your response via 'respond' command.` Use the `respond` subcommand to continue:
+
+```bash
+# CP1 — approve source plan
+python pipeline/orchestrator.py respond "A"
+# CP1 — approve with edits
+python pipeline/orchestrator.py respond "E: remove source 2, add https://arxiv.org/abs/2401.12345"
+# CP1 — cancel
+python pipeline/orchestrator.py respond "C"
+
+# CP2 — pick directions
+python pipeline/orchestrator.py respond "1,3"
+python pipeline/orchestrator.py respond "all"
+python pipeline/orchestrator.py respond "2: focus on simulation-free approaches"
+
+# CP3 — pick output format
+python pipeline/orchestrator.py respond "D"   # Report + Obsidian
+python pipeline/orchestrator.py respond "G"   # Report + Obsidian + Excalidraw
 ```
 
 By default the pipeline uses **Anthropic Claude** (claude-sonnet-4-6). To switch all agents to Mistral:
@@ -321,9 +364,9 @@ Approximate cost per full pipeline run using Anthropic Claude (claude-sonnet-4-6
 | Nam (synthesis) | 5 000 | 2 000 | $0.045 |
 | Som + Manao (parallel audit) | 3 000 × 2 | 800 × 2 | $0.042 |
 | Mod (insight extraction) | 4 000 | 1 000 | $0.027 |
-| Chompoo (preview format) | 2 000 | 600 | $0.015 |
+| Chompoo (literature verification) | 1 500 + Semantic Scholar API (free) | 600 | $0.012 |
 | Nanny (output writing) | 3 000–5 000 | 2 000–4 000 | $0.06–0.12 |
-| **Total per run** | | | **~$0.24–$0.30** |
+| **Total per run** | | | **~$0.23–$0.29** |
 
 Cached system prompts (all agents) reduce repeated-run costs by ~60–70%.
 Switching to `PIPELINE_LLM_BACKEND=mistral` with `mistral-small-latest` cuts cost to ~$0.01–0.03 per run.

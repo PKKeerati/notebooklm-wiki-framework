@@ -290,16 +290,27 @@ class NLMClient:
             return []
 
     @staticmethod
-    def generate_artifact(notebook_id: str, kind: str, output_path: Path) -> bool:
+    def generate_artifact(notebook_id: str, kind: str, output_path: Path,
+                          timeout: float = 330.0) -> bool:
         """Generate and download a NotebookLM artifact.
 
         kind: 'report' | 'slides' | 'mind_map'
+        timeout: hard wall-clock limit in seconds (default 330 s).
         Returns True on success, False on failure.
         """
         if not notebook_id or not _available():
             return False
         try:
-            return asyncio.run(_generate_artifact_async(notebook_id, kind, output_path))
+            return asyncio.run(
+                asyncio.wait_for(
+                    _generate_artifact_async(notebook_id, kind, output_path),
+                    timeout=timeout,
+                )
+            )
+        except asyncio.TimeoutError:
+            print(f"  [NLM] generate_artifact({kind}): timed out after {timeout:.0f}s",
+                  file=sys.stderr)
+            return False
         except Exception as e:
             print(f"  [NLM] generate_artifact({kind}): {e}", file=sys.stderr)
             return False

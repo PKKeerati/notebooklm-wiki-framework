@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from .base import BaseAgent
+from ..notebooklm_client import NLMClient
 
 REPORT_SYSTEM = """\
 You are Nanny, the Output Writer. Write a comprehensive technical research brief.
@@ -175,6 +176,12 @@ class NannyAgent(BaseAgent):
             except Exception as e:
                 print(f"  ⚠ Excalidraw build failed: {e}")
 
+        # NotebookLM native artifacts (complement Claude output)
+        notebook_id = state.get("notebook_id") or ""
+        if notebook_id:
+            nlm_written = self._generate_nlm_artifacts(notebook_id, output_dir, fmt)
+            written.extend(nlm_written)
+
         # Archive: full mission file with all agent handoffs
         ts = run_id.replace(":", "-").replace("T", "_")
         mission_path = output_dir / f"research_{ts}.md"
@@ -228,6 +235,46 @@ class NannyAgent(BaseAgent):
         print(f"    {abstract_path}")
 
         return {"output_files": written}
+
+    def _generate_nlm_artifacts(
+        self, notebook_id: str, output_dir: Path, fmt: str
+    ) -> list[str]:
+        """Generate NotebookLM native artifacts alongside Claude output.
+
+        fmt A/D/E/G → briefing report
+        fmt B/E     → slide deck
+        fmt F/E/G   → mind map JSON
+        """
+        written: list[str] = []
+
+        if fmt in ("A", "D", "E", "G"):
+            path = output_dir / "report_nlm.md"
+            print("  [NLM] Generating briefing report...", end="", flush=True)
+            if NLMClient.generate_artifact(notebook_id, "report", path):
+                written.append(str(path))
+                print(" ✓")
+            else:
+                print(" ✗ (skipped)")
+
+        if fmt in ("B", "E"):
+            path = output_dir / "slides_nlm.html"
+            print("  [NLM] Generating slide deck...", end="", flush=True)
+            if NLMClient.generate_artifact(notebook_id, "slides", path):
+                written.append(str(path))
+                print(" ✓")
+            else:
+                print(" ✗ (skipped)")
+
+        if fmt in ("F", "E", "G"):
+            path = output_dir / "mindmap_nlm.json"
+            print("  [NLM] Generating mind map...", end="", flush=True)
+            if NLMClient.generate_artifact(notebook_id, "mind_map", path):
+                written.append(str(path))
+                print(" ✓")
+            else:
+                print(" ✗ (skipped)")
+
+        return written
 
     def _update_obsidian(
         self, state: dict, mod: str, nam: str, date: str, output_dir: Path

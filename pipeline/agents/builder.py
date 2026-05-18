@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import re
 import yaml
 from datetime import datetime
@@ -6,8 +7,10 @@ from pathlib import Path
 from .base import BaseAgent
 try:
     from ..notebooklm_client import NLMClient
+    from .raw_pdf_scorer import score_raw_pdfs
 except ImportError:
     from notebooklm_client import NLMClient  # type: ignore[no-redef]
+    from agents.raw_pdf_scorer import score_raw_pdfs  # type: ignore[no-redef]
 
 # Reads from Dao's "Verified source URLs" section — real URLs only, no LLM-invented IDs
 _VERIFIED_URL_ROW = re.compile(r"^\|\s*\d+\s*\|\s*(https?://\S+)\s*\|", re.MULTILINE)
@@ -93,16 +96,44 @@ class BuilderAgent(BaseAgent):
             return {"notebook_id": None, "builder_skipped": True,
                     "failed_sources": [r["url"] for r in ocr_results if r["ocr"] == "failed"]}
 
-        # Collect local PDFs matched to source URLs and upload them alongside URLs
-        pdf_paths = [
+        # Collect local PDFs matched to source URLs
+        url_matched_pdfs = [
             Path(r["log"]) if r.get("log", "").endswith(".pdf") else _match_raw_pdf(r["url"])
             for r in ocr_results
             if r.get("pdf")
         ]
-        pdf_paths = [p for p in pdf_paths if p and p.exists()]
+        url_matched_pdfs = [p for p in url_matched_pdfs if p and p.exists()]
+
+        # ── Stage 3.5: Score raw/ KB PDFs and upload top-N ───────────────────
+        top_n = state.get("raw_pdf_top_n", 30)
+        min_score = state.get("raw_pdf_min_score", 0.15)
+        api_key = os.environ.get("MISTRAL_API_KEY")
+        print(f"  [Builder] Scoring raw/ PDFs for relevance (top {top_n})...")
+        scored = score_raw_pdfs(
+            query=state.get("pk_input", ""),
+            dao_handoff=dao_handoff,
+            wiki_dir=wiki_dir,
+            raw_dir=RAW_DIR,
+            top_n=top_n,
+            min_score=min_score,
+            api_key=api_key,
+        )
+        kb_pdfs = [p for p, _s, _r in scored]
+        if kb_pdfs:
+            print(f"  [Builder] Selected {len(kb_pdfs)} KB PDFs (top score: {scored[0][1]:.2f})")
+        else:
+            print("  [Builder] No KB PDFs met the relevance threshold.")
+
+        # Merge URL-matched + KB-scored PDFs (deduplicate)
+        seen_paths: set[Path] = set()
+        all_pdfs: list[Path] = []
+        for p in url_matched_pdfs + kb_pdfs:
+            if p not in seen_paths:
+                seen_paths.add(p)
+                all_pdfs.append(p)
 
         clean_sources = [s.strip() for s in sources if s.strip()]
-        loaded, failed = NLMClient.add_sources(notebook_id, clean_sources, pdf_paths)
+        loaded, failed = NLMClient.add_sources(notebook_id, clean_sources, all_pdfs)
         # Re-number for handoff display
         for i, item in enumerate(loaded, 1):
             item["num"] = i
@@ -114,7 +145,7 @@ class BuilderAgent(BaseAgent):
         print(f"  [Builder] Running NotebookLM web research on: {pk_input[:60]}...")
         web_sources = NLMClient.run_web_research(notebook_id, pk_input, max_sources=8)
 
-        handoff = _build_handoff(run_id, notebook_id, loaded, failed, ocr_results, wiki_context, web_sources)
+        handoff = _build_handoff(run_id, notebook_id, loaded, failed, ocr_results, wiki_context, web_sources, scored)
         self._write_handoff("builder", handoff)
         return {"notebook_id": notebook_id, "failed_sources": [f["source"] for f in failed]}
 
@@ -269,6 +300,7 @@ def _build_handoff(
     loaded: list, failed: list,
     ocr_results: list, wiki_context: str,
     web_sources: list | None = None,
+    scored_pdfs: list | None = None,
 ) -> str:
     ocr_ok = sum(1 for r in ocr_results if r["ocr"] in ("extracted", "cached", "cached/wiki"))
     nb_rows = "\n".join(
@@ -283,6 +315,10 @@ def _build_handoff(
         f"| {s['url'][:65]} | {s.get('title', '')[:50]} |"
         for s in (web_sources or [])
     ) or "| — | (none found) |"
+    kb_rows = "\n".join(
+        f"| {p.name[:60]} | {score:.2f} | {reason[:60]} |"
+        for p, score, reason in (scored_pdfs or [])
+    ) or "| — | — | (none selected) |"
 
     cherry_note = (
         f"Query NotebookLM notebook `{notebook_id}` for Q&A. "
@@ -307,6 +343,10 @@ def _build_handoff(
         f"| URL | Title |\n"
         f"|-----|-------|\n"
         f"{web_rows}\n\n"
+        f"### Raw KB PDFs uploaded ({len(scored_pdfs or [])} selected)\n"
+        f"| File | Score | Signals |\n"
+        f"|------|-------|--------|\n"
+        f"{kb_rows}\n\n"
         f"### Failed sources\n{fail_rows}\n\n"
         f"### Local Wiki Context\n{wiki_context[:3000]}\n\n"
         f"### Notes for Cherry\n{cherry_note}\n"

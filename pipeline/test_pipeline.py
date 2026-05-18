@@ -362,7 +362,7 @@ class TestBuilderAgent(unittest.TestCase):
         self.assertEqual(result["notebook_id"], "nb-test-123")
         handoff_path = self.pipeline_dir / "handoffs" / "handoff_builder.md"
         self.assertTrue(handoff_path.exists())
-        content = handoff_path.read_text()
+        content = handoff_path.read_text(encoding="utf-8")
         self.assertIn("nb-test-123", content)
 
     @patch("agents.builder.NLMClient.create_notebook", return_value=None)

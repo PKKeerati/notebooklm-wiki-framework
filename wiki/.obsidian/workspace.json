@@ -180,69 +180,34 @@
       "bases:Create new base": false
     }
   },
-  "floating": {
-    "id": "bf9d66fffc8adc01",
-    "type": "floating",
-    "children": [
-      {
-        "id": "aa68cb170c4720ee",
-        "type": "window",
-        "children": [
-          {
-            "id": "5add1160c3c7083f",
-            "type": "tabs",
-            "children": [
-              {
-                "id": "169facbe1a682772",
-                "type": "leaf",
-                "state": {
-                  "type": "empty",
-                  "state": {},
-                  "icon": "lucide-file",
-                  "title": "New tab"
-                }
-              }
-            ]
-          }
-        ],
-        "direction": "vertical",
-        "x": 0,
-        "y": 0,
-        "width": 2560,
-        "height": 1440,
-        "maximize": false,
-        "zoom": 0
-      }
-    ]
-  },
   "active": "3938795b95560aef",
   "lastOpenFiles": [
-    "hydrogen-storage-using-a-hot-pressure-swing-reactor.md",
-    "isothermal-activation-thermodynamic-and-hysteresis-of-mgh₂-h.md",
-    "volumetric-hydrogen-storage-capacity-in-metal-organic-framew.md",
-    "lectures-on-light.md",
-    "oxygen-diffusion-in-hcp-metals-from-first-principles.md",
-    "improved-hydrogen-storage-properties-of-mgh2-catalyzed-with-.md",
-    "the-role-of-metal-organic-frameworks-in-a-carbon-neutral-ene.md",
-    "superior-hydrogen-storage-in-high-entropy-alloys.md",
-    "kinetic-mechanisms-of-hydriding-and-dehydriding-reactions-in.md",
-    "robust-structural-identification-via-polyhedral-template-mat.md",
-    "destabilization-of-lithium-hydride-by-the-substitution-of-gr.md",
-    "shuffling-controlled-versus-strain-controlled-deformation-tw.md",
-    "atomistic-adsorption-of-oxygen-and-hydrogen-on-platinum-cata.md",
-    "review-of-magnesium-hydride-based-materials-development-and-.md",
-    "high-throughput-screening-of-metal-organic-frameworks-for-hy.md",
-    "phonons-phonopy-pro-tips.md",
-    "distributions-of-phonon-lifetimes-in-brillouin-zones.md",
-    "absorption-kinetics-and-hydride-formation-in-magnesium-films.md",
-    "thermodynamic-modelling-of-mg-bh4-2.md",
-    "evidence-of-the-hydrogen-release-mechanism-in-bulk-mgh₂.md",
-    "phase-transition-and-optoelectronic-properties-of-mgh2.md",
-    "hydrogen-storage-materials-for-mobile-and-stationary-applica.md",
-    "dft-calculations-of-hydrogen-diffusion-and-phase-transformat.md",
-    "thermodynamic-modelling-of-metal-hydrogen-systems-using-the-.md",
-    "numerical-study-on-a-two-stage-metal-hydride-hydrogen-compre.md",
-    "hydrogenation-of-l1₂-type-alni₃-alloy-at-high-pressure-and-t.md",
+    "hub-battery-cycling.md",
+    "the-effect-of-mn-on-the-structural-stability-of-mathrm-y-_-0.md",
+    "a-new-two-constant-equation-of-state.md",
+    "reaxff-_-text-mgh-reactive-force-field-for-magnesium-hydride.md",
+    "machine-learning-driven-search-of-hydrogen-storage-materials.md",
+    "thermodynamics-of-metal-hydrides-for-hydrogen-storage-applic.md",
+    "hardware-locality-hwloc.md",
+    "hydrogen-desorption-mechanism-in-a-li-n-h-system-by-means-of.md",
+    "final-report-for-the-doe-metal-hydride-center-of-excellence.md",
+    "first-principles-modeling-of-phase-equilibria.md",
+    "large-scale-screening-of-metal-hydride-mixtures-for-high-cap.md",
+    "principles-of-quantum-mechanics-old-ver.md",
+    "vortices-superfluidity-trapped-gases-bec-at-finite-temperatu.md",
+    "clebsch-gordan-coefficients-spherical-harmonics-and-d-functi.md",
+    "observation-of-moiré-excitons-in-wse2-ws2-heterostructure-su.md",
+    "tensor-operators.md",
+    "tutorial-1-the-workhorse-kohn-sham-dft.md",
+    "phase-equilibria-of-mixtures-containing-chain-molecules-pred.md",
+    "phase-coexistence-curves-for-off-lattice-polymer-solvent-mix.md",
+    "predicting-hydrogen-storage-in-nanoporous-materials-using-me.md",
+    "language-of-chemistry-module-handbook-2022-23.md",
+    "booking-confirmation-y32z44.md",
+    "thermodynamics-of-hydrogen-in-metals.md",
+    "the-characters-and-mechanism-research-of-hydrogen-absorption.md",
+    "uma-a-family-of-universal-models-for-atoms.md",
+    "fine-tuning-universal-machine-learned-interatomic-potentials.md",
     "concepts",
     "Untitled.canvas",
     "Untitled 8.canvas",

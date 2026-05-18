@@ -1,14 +1,19 @@
 """Shared utilities for pipeline agents."""
 import json
+import os
 import re
 import time
 import urllib.parse
 import urllib.request
 
+# Semantic Scholar free tier: 1 req/sec cumulative across all endpoints
+_S2_MIN_INTERVAL = 1.0
+_s2_last_call: float = 0.0
+
 
 def search_semantic_scholar(query: str, limit: int = 10) -> list[dict]:
     """Search Semantic Scholar API. Returns list of paper dicts."""
-    import os
+    global _s2_last_call
     base = "https://api.semanticscholar.org/graph/v1/paper/search"
     params = urllib.parse.urlencode({
         "query": query,
@@ -20,6 +25,13 @@ def search_semantic_scholar(query: str, limit: int = 10) -> list[dict]:
     api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
     if api_key:
         headers["x-api-key"] = api_key
+
+    # Rate-limit: wait until at least 1 s has passed since the last call
+    elapsed = time.monotonic() - _s2_last_call
+    if elapsed < _S2_MIN_INTERVAL:
+        time.sleep(_S2_MIN_INTERVAL - elapsed)
+    _s2_last_call = time.monotonic()
+
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as resp:

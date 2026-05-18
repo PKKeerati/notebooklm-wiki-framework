@@ -1,9 +1,11 @@
 import re
-import subprocess
-import sys
 import yaml
 from pathlib import Path
 from .base import BaseAgent
+try:
+    from ..notebooklm_client import NLMClient
+except ImportError:
+    from notebooklm_client import NLMClient  # type: ignore[no-redef]
 
 QUESTION_SYSTEM = """\
 You are Cherry, the Question Shaper in a materials science / ML research pipeline.
@@ -69,19 +71,6 @@ _SKIP_SECTIONS = re.compile(
 )
 
 
-def _ask_notebooklm(notebook_id: str, question: str, timeout: int = 60) -> str:
-    """Ask NotebookLM a question; return the answer text or an error string."""
-    cmd = [sys.executable, "-m", "notebooklm", "ask", question]
-    if notebook_id:
-        cmd = [sys.executable, "-m", "notebooklm", "-n", notebook_id, "ask", question]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return result.stdout.strip() or result.stderr.strip() or "[no response]"
-    except subprocess.TimeoutExpired:
-        return "[timed out]"
-    except FileNotFoundError:
-        return "[notebooklm not installed]"
-
 
 class CherryAgent(BaseAgent):
     def run(self, state: dict) -> dict:
@@ -109,9 +98,9 @@ class CherryAgent(BaseAgent):
         blind_spots = ""
 
         if nlm_available:
-            # Primary path: query NotebookLM
+            # Primary path: query NotebookLM in detailed mode (includes inline citations)
             for i, q in enumerate(questions, 1):
-                raw_answer = _ask_notebooklm(notebook_id, q)
+                raw_answer = NLMClient.ask(notebook_id, q, mode="detailed")
                 compressed = self._llm(
                     COMPRESS_SYSTEM,
                     f"Question: {q}\n\nAnswer:\n{raw_answer}",
@@ -119,9 +108,10 @@ class CherryAgent(BaseAgent):
                 )
                 qa_blocks.append(f"**Q{i}:** {q}\n**A{i}:**\n{compressed}")
 
-            blind_raw = _ask_notebooklm(
+            blind_raw = NLMClient.ask(
                 notebook_id,
                 "What important aspects of this topic were NOT covered by the sources?",
+                mode="concise",
             )
             blind_spots = self._llm(
                 COMPRESS_SYSTEM,
@@ -149,11 +139,13 @@ class CherryAgent(BaseAgent):
                 ]
                 blind_spots = "[NotebookLM unavailable — no claims pool found in KB]"
 
-        # Idea card for Nam
+        # Idea card for Nam — enriched with NotebookLM's own notebook summary if available
+        nlm_summary = NLMClient.get_notebook_summary(notebook_id) if nlm_available else ""
         idea_card = self._llm(
             "Summarise the research intent in 3-5 sentences for a synthesis agent. "
             "Be specific about what is being compared, investigated, or built.",
-            f"PK's question: {pk_input}\n\nGap description:\n{dao_handoff}",
+            f"PK's question: {pk_input}\n\nGap description:\n{dao_handoff}"
+            + (f"\n\nNotebookLM notebook summary:\n{nlm_summary}" if nlm_summary else ""),
             max_tokens=300,
         )
 

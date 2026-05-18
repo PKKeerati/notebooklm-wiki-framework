@@ -1,11 +1,13 @@
 from __future__ import annotations
 import re
-import subprocess
-import sys
 import yaml
 from datetime import datetime
 from pathlib import Path
 from .base import BaseAgent
+try:
+    from ..notebooklm_client import NLMClient
+except ImportError:
+    from notebooklm_client import NLMClient  # type: ignore[no-redef]
 
 # Reads from Dao's "Verified source URLs" section — real URLs only, no LLM-invented IDs
 _VERIFIED_URL_ROW = re.compile(r"^\|\s*\d+\s*\|\s*(https?://\S+)\s*\|", re.MULTILINE)
@@ -35,17 +37,6 @@ def _extract_sources(dao_handoff: str) -> list[str]:
             seen.add(url)
     return sources
 
-
-def _run_notebooklm(*args: str, timeout: int = 300) -> tuple[int, str, str]:
-    """Run notebooklm CLI; return (returncode, stdout, stderr)."""
-    cmd = [sys.executable, "-m", "notebooklm", *args]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return result.returncode, result.stdout.strip(), result.stderr.strip()
-    except FileNotFoundError:
-        return 1, "", "notebooklm not installed — run: pip install notebooklm"
-    except subprocess.TimeoutExpired:
-        return 1, "", f"notebooklm timed out after {timeout}s"
 
 
 def _url_to_pdf_stem(url: str) -> str:
@@ -96,28 +87,34 @@ class BuilderAgent(BaseAgent):
         loaded: list[dict] = []
         failed: list[dict] = []
 
-        rc, stdout, stderr = _run_notebooklm("create", f"Research: {run_id[:10]}")
-        if rc != 0:
-            self._write_handoff("builder", _stub_handoff(run_id, sources, stderr, ocr_results, wiki_context))
+        notebook_id = NLMClient.create_notebook(f"Research: {run_id[:10]}") or ""
+        if not notebook_id:
+            self._write_handoff("builder", _stub_handoff(run_id, sources, "NLM create failed", ocr_results, wiki_context))
             return {"notebook_id": None, "builder_skipped": True,
                     "failed_sources": [r["url"] for r in ocr_results if r["ocr"] == "failed"]}
 
-        id_match = re.search(r"([a-f0-9\-]{20,})", stdout)
-        if id_match:
-            notebook_id = id_match.group(1)
-            _run_notebooklm("use", notebook_id)
+        # Collect local PDFs matched to source URLs and upload them alongside URLs
+        pdf_paths = [
+            Path(r["log"]) if r.get("log", "").endswith(".pdf") else _match_raw_pdf(r["url"])
+            for r in ocr_results
+            if r.get("pdf")
+        ]
+        pdf_paths = [p for p in pdf_paths if p and p.exists()]
 
-        for i, src in enumerate(sources, 1):
-            src = src.strip()
-            if not src:
-                continue
-            rc, out, err = _run_notebooklm("source", "add", src, timeout=180)
-            if rc == 0:
-                loaded.append({"num": i, "source": src, "status": "COMPLETED"})
-            else:
-                failed.append({"num": i, "source": src, "reason": err or "unknown error"})
+        clean_sources = [s.strip() for s in sources if s.strip()]
+        loaded, failed = NLMClient.add_sources(notebook_id, clean_sources, pdf_paths)
+        # Re-number for handoff display
+        for i, item in enumerate(loaded, 1):
+            item["num"] = i
+        for i, item in enumerate(failed, 1):
+            item["num"] = len(loaded) + i
 
-        handoff = _build_handoff(run_id, notebook_id, loaded, failed, ocr_results, wiki_context)
+        # ── Stage 4: NLM web research (supplements Semantic Scholar) ─────────
+        pk_input = state.get("pk_input", "")
+        print(f"  [Builder] Running NotebookLM web research on: {pk_input[:60]}...")
+        web_sources = NLMClient.run_web_research(notebook_id, pk_input, max_sources=8)
+
+        handoff = _build_handoff(run_id, notebook_id, loaded, failed, ocr_results, wiki_context, web_sources)
         self._write_handoff("builder", handoff)
         return {"notebook_id": notebook_id, "failed_sources": [f["source"] for f in failed]}
 
@@ -271,6 +268,7 @@ def _build_handoff(
     run_id: str, notebook_id: str,
     loaded: list, failed: list,
     ocr_results: list, wiki_context: str,
+    web_sources: list | None = None,
 ) -> str:
     ocr_ok = sum(1 for r in ocr_results if r["ocr"] in ("extracted", "cached", "cached/wiki"))
     nb_rows = "\n".join(
@@ -281,6 +279,10 @@ def _build_handoff(
         f"| {r['url'][:55]} | {r['ocr']} | {r['log'] or '—'} |"
         for r in ocr_results
     )
+    web_rows = "\n".join(
+        f"| {s['url'][:65]} | {s.get('title', '')[:50]} |"
+        for s in (web_sources or [])
+    ) or "| — | (none found) |"
 
     cherry_note = (
         f"Query NotebookLM notebook `{notebook_id}` for Q&A. "
@@ -297,10 +299,14 @@ def _build_handoff(
         f"| URL | OCR Status | log/ Path |\n"
         f"|-----|-----------|----------|\n"
         f"{ocr_rows}\n\n"
-        f"### NotebookLM Sources\n"
+        f"### NotebookLM Sources (from Semantic Scholar)\n"
         f"| # | Source | Status |\n"
         f"|---|--------|--------|\n"
         f"{nb_rows or '| — | (none loaded) | — |'}\n\n"
+        f"### NLM Web Research Sources ({len(web_sources or [])} imported)\n"
+        f"| URL | Title |\n"
+        f"|-----|-------|\n"
+        f"{web_rows}\n\n"
         f"### Failed sources\n{fail_rows}\n\n"
         f"### Local Wiki Context\n{wiki_context[:3000]}\n\n"
         f"### Notes for Cherry\n{cherry_note}\n"

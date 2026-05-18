@@ -87,6 +87,13 @@ class ModAgent(BaseAgent):
         handoff = self._llm(SYSTEM, user_msg, max_tokens=3000)
         self._write_handoff("mod", handoff)
 
+        # Skip all KB writes if the handoff flags any conflicts — leave resolution to PK
+        has_conflict = bool(re.search(r"\bCONFLICT\b", handoff, re.IGNORECASE))
+        if has_conflict:
+            self.audit_log(wiki_dir, "Mod", "conflict_skipped",
+                           f"topic={topic[:60]} — KB writes suppressed due to conflict")
+            return {"kb_pages_updated": [], "kb_pages_created": []}
+
         # Persist insights to wiki/concepts/ (session-aware, stale-detecting)
         self._persist_to_wiki(handoff, topic, wiki_dir, state["run_id"])
 

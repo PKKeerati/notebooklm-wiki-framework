@@ -8,6 +8,7 @@ import urllib.request
 
 def search_semantic_scholar(query: str, limit: int = 10) -> list[dict]:
     """Search Semantic Scholar API. Returns list of paper dicts."""
+    import os
     base = "https://api.semanticscholar.org/graph/v1/paper/search"
     params = urllib.parse.urlencode({
         "query": query,
@@ -15,8 +16,12 @@ def search_semantic_scholar(query: str, limit: int = 10) -> list[dict]:
         "fields": "title,authors,year,externalIds,openAccessPdf,abstract",
     })
     url = f"{base}?{params}"
+    headers = {"User-Agent": "notebooklm-wiki-pipeline/1.0"}
+    api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
+    if api_key:
+        headers["x-api-key"] = api_key
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "notebooklm-wiki-pipeline/1.0"})
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
             return data.get("data", [])

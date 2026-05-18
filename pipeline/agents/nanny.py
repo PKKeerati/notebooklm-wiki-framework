@@ -2,7 +2,10 @@ import re
 from datetime import datetime
 from pathlib import Path
 from .base import BaseAgent
-from ..notebooklm_client import NLMClient
+try:
+    from ..notebooklm_client import NLMClient
+except ImportError:
+    from notebooklm_client import NLMClient  # type: ignore[no-redef]
 
 REPORT_SYSTEM = """\
 You are Nanny, the Output Writer. Write a comprehensive technical research brief.

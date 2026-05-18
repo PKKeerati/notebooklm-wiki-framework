@@ -4,7 +4,10 @@ import yaml
 from datetime import datetime
 from pathlib import Path
 from .base import BaseAgent
-from ..notebooklm_client import NLMClient
+try:
+    from ..notebooklm_client import NLMClient
+except ImportError:
+    from notebooklm_client import NLMClient  # type: ignore[no-redef]
 
 # Reads from Dao's "Verified source URLs" section — real URLs only, no LLM-invented IDs
 _VERIFIED_URL_ROW = re.compile(r"^\|\s*\d+\s*\|\s*(https?://\S+)\s*\|", re.MULTILINE)

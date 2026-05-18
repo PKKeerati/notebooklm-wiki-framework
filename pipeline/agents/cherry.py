@@ -2,7 +2,10 @@ import re
 import yaml
 from pathlib import Path
 from .base import BaseAgent
-from ..notebooklm_client import NLMClient
+try:
+    from ..notebooklm_client import NLMClient
+except ImportError:
+    from notebooklm_client import NLMClient  # type: ignore[no-redef]
 
 QUESTION_SYSTEM = """\
 You are Cherry, the Question Shaper in a materials science / ML research pipeline.

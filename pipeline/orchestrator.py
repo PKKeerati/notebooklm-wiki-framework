@@ -210,6 +210,13 @@ class Orchestrator:
         state["completed_agents"].append("builder")
         if result.get("failed_sources"):
             _warn(f"{len(result['failed_sources'])} source(s) failed — pipeline continues.")
+        if state.get("notebook_id"):
+            try:
+                from notebooklm_client import NLMClient
+            except ImportError:
+                from pipeline.notebooklm_client import NLMClient
+            NLMClient.save_notebook_ref(state["notebook_id"], PIPELINE_DIR)
+            _ok(f"Notebook saved → pipeline/nlm_notebook.txt")
         return state
 
     def _step_cherry(self, state: dict) -> dict:

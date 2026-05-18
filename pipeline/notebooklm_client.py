@@ -103,8 +103,28 @@ async def _get_summary_async(notebook_id: str) -> str:
         return await client.notebooks.get_summary(notebook_id) or ""
 
 
+def _status_is_failed(status: object) -> bool:
+    """Normalise artifact status — handles both object and raw-dict responses."""
+    if isinstance(status, dict):
+        return status.get("is_failed", False)
+    return bool(getattr(status, "is_failed", False))
+
+
+def _status_task_id(status: object) -> str:
+    if isinstance(status, dict):
+        return status.get("task_id", "")
+    return getattr(status, "task_id", "")
+
+
+def _final_is_complete(final: object) -> bool:
+    if isinstance(final, dict):
+        return final.get("is_complete", False)
+    return bool(getattr(final, "is_complete", False))
+
+
 async def _generate_artifact_async(
-    notebook_id: str, kind: str, output_path: Path
+    notebook_id: str, kind: str, output_path: Path,
+    wait_timeout: int = 600,
 ) -> bool:
     from notebooklm import NotebookLMClient
     from notebooklm.rpc.types import ReportFormat, SlideDeckFormat
@@ -117,15 +137,15 @@ async def _generate_artifact_async(
                 status = await client.artifacts.generate_report(
                     notebook_id, report_format=ReportFormat.BRIEFING_DOC
                 )
-                if not status or status.is_failed:
+                if not status or _status_is_failed(status):
                     return False
                 final = await client.artifacts.wait_for_completion(
-                    notebook_id, status.task_id, timeout=300
+                    notebook_id, _status_task_id(status), timeout=wait_timeout
                 )
-                if not final.is_complete:
+                if not _final_is_complete(final):
                     return False
                 await client.artifacts.download_report(
-                    notebook_id, str(output_path), status.task_id
+                    notebook_id, str(output_path), _status_task_id(status)
                 )
                 return True
 
@@ -133,29 +153,29 @@ async def _generate_artifact_async(
                 status = await client.artifacts.generate_slide_deck(
                     notebook_id, slide_format=SlideDeckFormat.DETAILED_DECK
                 )
-                if not status or status.is_failed:
+                if not status or _status_is_failed(status):
                     return False
                 final = await client.artifacts.wait_for_completion(
-                    notebook_id, status.task_id, timeout=300
+                    notebook_id, _status_task_id(status), timeout=wait_timeout
                 )
-                if not final.is_complete:
+                if not _final_is_complete(final):
                     return False
                 await client.artifacts.download_slide_deck(
-                    notebook_id, str(output_path), status.task_id
+                    notebook_id, str(output_path), _status_task_id(status)
                 )
                 return True
 
             elif kind == "mind_map":
                 status = await client.artifacts.generate_mind_map(notebook_id)
-                if not status or status.is_failed:
+                if not status or _status_is_failed(status):
                     return False
                 final = await client.artifacts.wait_for_completion(
-                    notebook_id, status.task_id, timeout=300
+                    notebook_id, _status_task_id(status), timeout=wait_timeout
                 )
-                if not final.is_complete:
+                if not _final_is_complete(final):
                     return False
                 await client.artifacts.download_mind_map(
-                    notebook_id, str(output_path), status.task_id
+                    notebook_id, str(output_path), _status_task_id(status)
                 )
                 return True
 
@@ -292,11 +312,11 @@ class NLMClient:
 
     @staticmethod
     def generate_artifact(notebook_id: str, kind: str, output_path: Path,
-                          timeout: float = 330.0) -> bool:
+                          timeout: float = 660.0) -> bool:
         """Generate and download a NotebookLM artifact.
 
         kind: 'report' | 'slides' | 'mind_map'
-        timeout: hard wall-clock limit in seconds (default 330 s).
+        timeout: hard wall-clock limit in seconds (default 660 s / 11 min).
         Returns True on success, False on failure.
         """
         if not notebook_id or not _available():
@@ -304,7 +324,8 @@ class NLMClient:
         try:
             return asyncio.run(
                 asyncio.wait_for(
-                    _generate_artifact_async(notebook_id, kind, output_path),
+                    _generate_artifact_async(notebook_id, kind, output_path,
+                                             wait_timeout=int(timeout) - 30),
                     timeout=timeout,
                 )
             )
@@ -315,3 +336,15 @@ class NLMClient:
         except Exception as e:
             print(f"  [NLM] generate_artifact({kind}): {e}", file=sys.stderr)
             return False
+
+    @staticmethod
+    def save_notebook_ref(notebook_id: str, pipeline_dir: Path) -> None:
+        """Write notebook ID to pipeline/nlm_notebook.txt for manual access."""
+        if not notebook_id:
+            return
+        ref_path = pipeline_dir / "nlm_notebook.txt"
+        ref_path.write_text(
+            f"notebook_id: {notebook_id}\n"
+            f"url: https://notebooklm.google.com/notebook/{notebook_id}\n",
+            encoding="utf-8",
+        )

@@ -165,6 +165,38 @@ async def _generate_artifact_async(
     return False
 
 
+async def _run_web_research_async(
+    notebook_id: str, query: str, max_sources: int, timeout: float
+) -> list[dict]:
+    """Start NLM web research, poll until done, import top sources."""
+    from notebooklm import NotebookLMClient
+
+    async with await NotebookLMClient.from_storage() as client:
+        task = await client.research.start(notebook_id, query, source="web", mode="fast")
+        if not task:
+            return []
+        task_id = task["task_id"]
+
+        # Poll until completed or timeout
+        deadline = asyncio.get_event_loop().time() + timeout
+        while True:
+            result = await client.research.poll(notebook_id, task_id)
+            if result.get("status") == "completed":
+                break
+            if asyncio.get_event_loop().time() > deadline:
+                print(f"  [NLM] research timed out after {timeout:.0f}s", file=sys.stderr)
+                return []
+            await asyncio.sleep(4)
+
+        # Keep only sources with real URLs, up to max_sources
+        sources = [s for s in result.get("sources", []) if s.get("url")][:max_sources]
+        if not sources:
+            return []
+
+        await client.research.import_sources(notebook_id, task_id, sources)
+        return [{"url": s["url"], "title": s.get("title", "")} for s in sources]
+
+
 # ── Public sync facade ────────────────────────────────────────────────────────
 
 class NLMClient:
@@ -230,6 +262,32 @@ class NLMClient:
             return asyncio.run(_get_summary_async(notebook_id))
         except Exception:
             return ""
+
+    @staticmethod
+    def run_web_research(
+        notebook_id: str,
+        query: str,
+        max_sources: int = 8,
+        timeout: float = 120.0,
+    ) -> list[dict]:
+        """Run NotebookLM web research and import discovered sources.
+
+        Starts a fast web research session, polls until complete, imports
+        the top `max_sources` results into the notebook, and returns a list
+        of {"url": ..., "title": ...} dicts for handoff display.
+        Returns [] on failure — never raises.
+        """
+        if not notebook_id or not _available():
+            return []
+        try:
+            results = asyncio.run(
+                _run_web_research_async(notebook_id, query, max_sources, timeout)
+            )
+            print(f"  [NLM] Web research: {len(results)} sources imported")
+            return results
+        except Exception as e:
+            print(f"  [NLM] run_web_research: {e}", file=sys.stderr)
+            return []
 
     @staticmethod
     def generate_artifact(notebook_id: str, kind: str, output_path: Path) -> bool:

@@ -106,7 +106,12 @@ class BuilderAgent(BaseAgent):
         for i, item in enumerate(failed, 1):
             item["num"] = len(loaded) + i
 
-        handoff = _build_handoff(run_id, notebook_id, loaded, failed, ocr_results, wiki_context)
+        # ── Stage 4: NLM web research (supplements Semantic Scholar) ─────────
+        pk_input = state.get("pk_input", "")
+        print(f"  [Builder] Running NotebookLM web research on: {pk_input[:60]}...")
+        web_sources = NLMClient.run_web_research(notebook_id, pk_input, max_sources=8)
+
+        handoff = _build_handoff(run_id, notebook_id, loaded, failed, ocr_results, wiki_context, web_sources)
         self._write_handoff("builder", handoff)
         return {"notebook_id": notebook_id, "failed_sources": [f["source"] for f in failed]}
 
@@ -260,6 +265,7 @@ def _build_handoff(
     run_id: str, notebook_id: str,
     loaded: list, failed: list,
     ocr_results: list, wiki_context: str,
+    web_sources: list | None = None,
 ) -> str:
     ocr_ok = sum(1 for r in ocr_results if r["ocr"] in ("extracted", "cached", "cached/wiki"))
     nb_rows = "\n".join(
@@ -270,6 +276,10 @@ def _build_handoff(
         f"| {r['url'][:55]} | {r['ocr']} | {r['log'] or '—'} |"
         for r in ocr_results
     )
+    web_rows = "\n".join(
+        f"| {s['url'][:65]} | {s.get('title', '')[:50]} |"
+        for s in (web_sources or [])
+    ) or "| — | (none found) |"
 
     cherry_note = (
         f"Query NotebookLM notebook `{notebook_id}` for Q&A. "
@@ -286,10 +296,14 @@ def _build_handoff(
         f"| URL | OCR Status | log/ Path |\n"
         f"|-----|-----------|----------|\n"
         f"{ocr_rows}\n\n"
-        f"### NotebookLM Sources\n"
+        f"### NotebookLM Sources (from Semantic Scholar)\n"
         f"| # | Source | Status |\n"
         f"|---|--------|--------|\n"
         f"{nb_rows or '| — | (none loaded) | — |'}\n\n"
+        f"### NLM Web Research Sources ({len(web_sources or [])} imported)\n"
+        f"| URL | Title |\n"
+        f"|-----|-------|\n"
+        f"{web_rows}\n\n"
         f"### Failed sources\n{fail_rows}\n\n"
         f"### Local Wiki Context\n{wiki_context[:3000]}\n\n"
         f"### Notes for Cherry\n{cherry_note}\n"

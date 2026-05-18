@@ -1,4 +1,5 @@
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from .base import BaseAgent
@@ -6,6 +7,12 @@ try:
     from ..notebooklm_client import NLMClient
 except ImportError:
     from notebooklm_client import NLMClient  # type: ignore[no-redef]
+
+# Force UTF-8 I/O on Windows so ✓/✗ and other Unicode chars print correctly
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 REPORT_SYSTEM = """\
 You are Nanny, the Output Writer. Write a comprehensive technical research brief.

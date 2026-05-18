@@ -15,7 +15,8 @@ def _available() -> bool:
     try:
         import notebooklm  # noqa: F401
         return True
-    except ImportError:
+    except (ImportError, SystemExit):
+        # notebooklm-py raises SystemExit on Python < 3.10
         return False
 
 

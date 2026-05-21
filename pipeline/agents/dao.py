@@ -22,6 +22,7 @@ Your job:
    - State its priority: High / Medium / Low.
    - Write 2 sentences: what it shows, and what Cherry should extract for PK's question.
 5. Propose a step-by-step workflow that addresses the gaps using the selected sources.
+6. Output keyword groups for scoring local KB PDFs (see format below).
 
 Output EXACTLY this Markdown — no preamble, no extra text:
 
@@ -48,6 +49,19 @@ Output EXACTLY this Markdown — no preamble, no extra text:
 ### Proposed Workflow
 1. [Step: tool/method — expected output]
 2. ...
+
+### Keyword Groups
+[3-6 lines. Each line is one cluster of closely related technical terms relevant to PK's question.
+Format: `- {high|medium|low}: term1, term2, term3, ...`
+high   = core concepts / model names / material names directly in the question
+medium = closely related methods, properties, or experimental techniques
+low    = peripheral but plausibly co-cited terms
+Example (do NOT copy — generate from the actual question):
+- high: mace, nequip, gap, sevennet, machine learning potential, mlip, nnp
+- high: mg, mgh2, magnesium hydride, mg-based alloy
+- medium: pci, isotherm, desorption, plateau pressure, thermodynamic
+- low: hydrogen storage, hydride formation, phase transition
+Generate 3-6 groups, 4-10 terms each, covering the vocabulary PK's papers are likely to use.]
 """
 
 

@@ -19,9 +19,9 @@ from pathlib import Path
 
 _YEAR_RE = re.compile(r"\b(19|20)(\d{2})\b")
 
-# ── Topic keyword groups ──────────────────────────────────────────────────────
-# Covers the hydrogen-storage / MLIP research domain.
-# Each entry: (keywords, bonus_weight)
+# ── Fallback topic keyword groups (used only when Dao provides none) ──────────
+# Hard-coded for the Mg-hydride / MLIP domain. At runtime these are replaced
+# by the query-specific groups Dao writes into its handoff.
 _DOMAIN_GROUPS: list[tuple[list[str], float]] = [
     (["mg", "mgh2", "magnesium", "mgni", "mgga", "mgla", "mg-based",
       "mg2ni", "mg2co", "mg-h"], 0.30),
@@ -36,6 +36,28 @@ _DOMAIN_GROUPS: list[tuple[list[str], float]] = [
     (["phase transition", "hydrogen storage", "hydrogen diffusion",
       "hydride formation", "hydrogenation", "dehydrogenation"], 0.20),
 ]
+
+_WEIGHT_MAP = {"high": 0.30, "medium": 0.20, "low": 0.10}
+
+
+def parse_keyword_groups(dao_handoff: str) -> list[tuple[list[str], float]]:
+    """Parse the ### Keyword Groups section from Dao's handoff.
+
+    Returns list of (terms, weight) ready for score_raw_pdfs().
+    Empty list if the section is absent or unparseable (caller falls back).
+    """
+    section = re.search(r"### Keyword Groups\n(.*?)(?=\n###|\Z)", dao_handoff, re.DOTALL)
+    if not section:
+        return []
+    groups: list[tuple[list[str], float]] = []
+    for line in section.group(1).splitlines():
+        m = re.match(r"-\s*(high|medium|low):\s*(.+)", line.strip(), re.IGNORECASE)
+        if m:
+            weight = _WEIGHT_MAP.get(m.group(1).lower(), 0.15)
+            terms = [t.strip().lower() for t in m.group(2).split(",") if t.strip()]
+            if terms:
+                groups.append((terms, weight))
+    return groups
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -99,6 +121,7 @@ def score_raw_pdfs(
     top_n: int = 30,
     min_score: float = 0.15,
     api_key: str | None = None,
+    query_groups: list[tuple[list[str], float]] | None = None,
 ) -> list[tuple[Path, float, str]]:
     """Score PDFs in raw_dir for relevance to query.
 
@@ -107,7 +130,7 @@ def score_raw_pdfs(
 
     Scoring layers:
       1. semantic_sim  — cosine vs query embedding (needs semantic index)
-      2. topic_bonus   — domain keyword group matches
+      2. topic_bonus   — keyword group matches (query_groups from Dao, else _DOMAIN_GROUPS)
       3. recency_bonus — year from filename
     """
     if not raw_dir.exists():
@@ -138,11 +161,19 @@ def score_raw_pdfs(
         q_vec = _embed(query, api_key)
         time.sleep(0.5)  # rate-limit courtesy pause
 
-    # ── Build topic groups: domain + dynamic keywords ─────────────────────────
+    # ── Build topic groups ────────────────────────────────────────────────────
+    # Prefer Dao's query-specific groups; fall back to hard-coded domain groups.
+    if query_groups:
+        base_groups = query_groups
+        print(f"  [scorer] Using {len(base_groups)} query-specific keyword groups from Dao.")
+    else:
+        base_groups = _DOMAIN_GROUPS.copy()
+        print("  [scorer] No Dao keyword groups found — using fallback domain groups.")
+
     dynamic_kws = _dynamic_keywords(query, dao_handoff)
-    topic_groups = _DOMAIN_GROUPS.copy()
+    topic_groups = base_groups
     if dynamic_kws:
-        topic_groups.append((dynamic_kws, 0.15))
+        topic_groups = base_groups + [(dynamic_kws, 0.10)]
 
     # ── Score every PDF ───────────────────────────────────────────────────────
     results: list[tuple[Path, float, str]] = []

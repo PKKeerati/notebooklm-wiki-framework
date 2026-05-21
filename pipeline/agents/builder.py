@@ -7,10 +7,10 @@ from pathlib import Path
 from .base import BaseAgent
 try:
     from ..notebooklm_client import NLMClient
-    from .raw_pdf_scorer import score_raw_pdfs
+    from .raw_pdf_scorer import score_raw_pdfs, parse_keyword_groups
 except ImportError:
     from notebooklm_client import NLMClient  # type: ignore[no-redef]
-    from agents.raw_pdf_scorer import score_raw_pdfs  # type: ignore[no-redef]
+    from agents.raw_pdf_scorer import score_raw_pdfs, parse_keyword_groups  # type: ignore[no-redef]
 
 # Reads from Dao's "Verified source URLs" section — real URLs only, no LLM-invented IDs
 _VERIFIED_URL_ROW = re.compile(r"^\|\s*\d+\s*\|\s*(https?://\S+)\s*\|", re.MULTILINE)
@@ -108,6 +108,7 @@ class BuilderAgent(BaseAgent):
         top_n = state.get("raw_pdf_top_n", 30)
         min_score = state.get("raw_pdf_min_score", 0.15)
         api_key = os.environ.get("MISTRAL_API_KEY")
+        query_groups = parse_keyword_groups(dao_handoff)
         print(f"  [Builder] Scoring raw/ PDFs for relevance (top {top_n})...")
         scored = score_raw_pdfs(
             query=state.get("pk_input", ""),
@@ -117,6 +118,7 @@ class BuilderAgent(BaseAgent):
             top_n=top_n,
             min_score=min_score,
             api_key=api_key,
+            query_groups=query_groups or None,
         )
         kb_pdfs = [p for p, _s, _r in scored]
         if kb_pdfs:

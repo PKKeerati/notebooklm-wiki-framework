@@ -9,36 +9,51 @@ A two-layer research intelligence system for materials science / ML potentials r
 - **Layer 1 — Permanent Brain** (`wiki/` + Obsidian): KB built from research PDFs via `scripts/wiki_manager.py`
 - **Layer 2 — Exploration** (`pipeline/`): Multi-agent pipeline using Google NotebookLM as a source reader and Claude agents for synthesis
 
+## Python Environment
+
+This project requires Python 3.11+ (notebooklm-py dependency). Always use the `.venv`:
+
+```bash
+# Activate (do this once per terminal session)
+.venv\Scripts\activate        # Windows PowerShell / CMD
+source .venv/Scripts/activate # Git Bash / WSL
+
+# Or invoke directly without activating
+.venv\Scripts\python.exe pipeline/orchestrator.py start "..."
+```
+
+Claude Code: **always prefix Python commands with `.venv/Scripts/python.exe`** (or use the activated venv). Never use bare `python` — it resolves to Python 3.9 which lacks notebooklm-py support.
+
 ## Running the Pipeline
 
 ```bash
 # Start a new run
-python pipeline/orchestrator.py start "Your research question here"
+.venv/Scripts/python.exe pipeline/orchestrator.py start "Your research question here"
 
 # Resume after interruption or checkpoint
-python pipeline/orchestrator.py resume
+.venv/Scripts/python.exe pipeline/orchestrator.py resume
 
 # Show current state
-python pipeline/orchestrator.py status
+.venv/Scripts/python.exe pipeline/orchestrator.py status
 
 # Clear state and handoffs (prompts for confirmation)
-python pipeline/orchestrator.py reset
+.venv/Scripts/python.exe pipeline/orchestrator.py reset
 ```
 
 ## Layer 1 — KB Ingestion (wiki_manager.py)
 
 ```bash
 # Ingest all new PDFs from raw/
-python scripts/wiki_manager.py all
+.venv/Scripts/python.exe scripts/wiki_manager.py all
 
 # Ingest one PDF
-python scripts/wiki_manager.py ingest raw/paper.pdf
+.venv/Scripts/python.exe scripts/wiki_manager.py ingest raw/paper.pdf
 
 # Semantic search across the KB
-python scripts/wiki_manager.py query "equivariant message passing benchmark"
+.venv/Scripts/python.exe scripts/wiki_manager.py query "equivariant message passing benchmark"
 
 # Rebuild wiki/index.md
-python scripts/wiki_manager.py index
+.venv/Scripts/python.exe scripts/wiki_manager.py index
 ```
 
 **Backend config** — set in `scripts/wiki_manager.py` or via env vars:
@@ -72,8 +87,10 @@ Install `notebooklm-py` from GitHub — it is not on PyPI (see `requirements.txt
 ### Agent Flow (pipeline/)
 
 ```
-Dao → Builder → Cherry → Nam → [Som ∥ Manao] → Mod → Chompoo → Nanny
+Dao [→ Fah internally] → Builder → Cherry → Nam → [Som ∥ Manao] → Mod → Chompoo → Nanny
 ```
+
+Fah is called inside `DaoAgent.run()` as its first step — not by the orchestrator. The orchestrator always starts from Dao.
 
 The orchestrator (`pipeline/orchestrator.py`) is a state machine keyed on `state["current_step"]`. It saves state to `pipeline/pipeline_state.json` after every step so runs survive interruption. Som and Manao are always launched in parallel via `threading.Thread`.
 
@@ -96,6 +113,7 @@ Agents communicate exclusively through `pipeline/handoffs/handoff_[agent].md` fi
 
 | Handoff file | Written by | Read by |
 |---|---|---|
+| `handoff_fah.md` | Fah (inside Dao) | Dao |
 | `handoff_dao.md` | Dao | Builder, Cherry, Nam |
 | `handoff_builder.md` | Builder | Cherry |
 | `handoff_cherry.md` | Cherry | Nam, Som, Manao, Nanny |

@@ -4,21 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "d486d105949861d8",
+        "id": "a08fe2d2027dc77d",
         "type": "tabs",
         "children": [
           {
-            "id": "3938795b95560aef",
+            "id": "2d1126b7b98c09dc",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "hub-battery-cycling.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "hub-battery-cycling"
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
             }
           }
         ]
@@ -78,7 +74,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 522.5
   },
   "right": {
     "id": "c92e457f053cf5cf",
@@ -180,36 +176,36 @@
       "bases:Create new base": false
     }
   },
-  "active": "3938795b95560aef",
+  "active": "2d1126b7b98c09dc",
   "lastOpenFiles": [
-    "hub-battery-cycling.md",
-    "the-effect-of-mn-on-the-structural-stability-of-mathrm-y-_-0.md",
-    "a-new-two-constant-equation-of-state.md",
-    "reaxff-_-text-mgh-reactive-force-field-for-magnesium-hydride.md",
-    "machine-learning-driven-search-of-hydrogen-storage-materials.md",
-    "thermodynamics-of-metal-hydrides-for-hydrogen-storage-applic.md",
-    "hardware-locality-hwloc.md",
-    "hydrogen-desorption-mechanism-in-a-li-n-h-system-by-means-of.md",
-    "final-report-for-the-doe-metal-hydride-center-of-excellence.md",
-    "first-principles-modeling-of-phase-equilibria.md",
-    "large-scale-screening-of-metal-hydride-mixtures-for-high-cap.md",
-    "principles-of-quantum-mechanics-old-ver.md",
-    "vortices-superfluidity-trapped-gases-bec-at-finite-temperatu.md",
-    "clebsch-gordan-coefficients-spherical-harmonics-and-d-functi.md",
-    "observation-of-moiré-excitons-in-wse2-ws2-heterostructure-su.md",
-    "tensor-operators.md",
-    "tutorial-1-the-workhorse-kohn-sham-dft.md",
-    "phase-equilibria-of-mixtures-containing-chain-molecules-pred.md",
-    "phase-coexistence-curves-for-off-lattice-polymer-solvent-mix.md",
-    "predicting-hydrogen-storage-in-nanoporous-materials-using-me.md",
-    "language-of-chemistry-module-handbook-2022-23.md",
-    "booking-confirmation-y32z44.md",
-    "thermodynamics-of-hydrogen-in-metals.md",
-    "the-characters-and-mechanism-research-of-hydrogen-absorption.md",
-    "uma-a-family-of-universal-models-for-atoms.md",
-    "fine-tuning-universal-machine-learned-interatomic-potentials.md",
-    "concepts",
+    "hub-method-acceleration.md",
+    "Q5.md",
+    "hub-quantum-theory.md",
+    "hub-quantum-photonics.md",
+    "hub-proteins.md",
+    "hub-porous-h2-adsorbents.md",
+    "hub-phonons-and-anharmonicity.md",
+    "hub-perovskites.md",
+    "hub-molecules.md",
+    "hub-ml-theory.md",
+    "hub-ml-potentials.md",
+    "hub-hydrogen-storage-materials.md",
+    "hub-h2-storage-simulations.md",
+    "hub-h2-storage-experiments.md",
+    "hub-group-theory.md",
+    "hub-glasses-and-disorder.md",
+    "hub-generative-models.md",
+    "hub-gaussian-processes.md",
+    "hub-electrochemistry.md",
+    "hub-drug-discovery.md",
+    "hub-crystals-and-alloys.md",
+    "hub-applied-mathematics.md",
+    "hub-2d-materials.md",
+    "superoxide-stability-for-reversible-na-o₂-electrochemistry.md",
+    "transferable-machine-learning-model-of-the-electron-density.md",
+    "order-force-constants-fcs-can-be-extracted-from-a-gaussian-p.md",
     "Untitled.canvas",
+    "concepts",
     "Untitled 8.canvas",
     "Untitled 7.canvas",
     "Untitled 6.canvas",

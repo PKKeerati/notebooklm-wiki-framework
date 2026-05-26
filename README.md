@@ -154,16 +154,51 @@ LLM_BACKEND = "gemini"      # recommended free option
 **Recommended zero-cost stack:** PyMuPDF + Gemini — no credit card, handles most research PDFs well.
 
 ### Tools
-- Python 3.9+
+- **Python 3.11+** — required by `notebooklm-py` (Python 3.9/3.10 will not work)
 - [Obsidian](https://obsidian.md) — open `wiki/` as your vault
 
 ---
 
 ## Installation
 
+### 1. Clone the repo
+
 ```bash
 git clone https://github.com/PKKeerati/notebooklm-wiki-framework.git
 cd notebooklm-wiki-framework
+```
+
+### 2. Install Python 3.11+
+
+**Windows** (if not already installed):
+```powershell
+winget install Python.Python.3.11
+```
+Or download from [python.org/downloads](https://www.python.org/downloads/).
+
+Verify: `py -3.11 --version` should print `Python 3.11.x`.
+
+### 3. Create a virtual environment
+
+> **Always use the `.venv`** — bare `python` on Windows may resolve to Python 3.9 which lacks `notebooklm-py` support.
+
+```powershell
+# Windows
+py -3.11 -m venv .venv
+.venv\Scripts\activate
+```
+
+```bash
+# macOS / Linux
+python3.11 -m venv .venv
+source .venv/bin/activate
+```
+
+All subsequent commands assume the venv is **activated** (or you prefix with `.venv/Scripts/python.exe` / `.venv/bin/python`).
+
+### 4. Install dependencies
+
+```bash
 pip install -r requirements.txt
 
 # For PDF extraction (pick one):
@@ -180,36 +215,56 @@ pip install pymupdf          # free, recommended
 pip install numpy            # required for vector similarity
 ```
 
-### Install notebooklm-py (not on PyPI — install from GitHub)
+### 5. Install notebooklm-py (not on PyPI)
 
 ```bash
-# Any platform:
 pip install https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip
-
-# macOS / Linux:
-curl -L https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip -o /tmp/notebooklm.zip && pip install /tmp/notebooklm.zip
-
-# Windows (PowerShell):
-Invoke-WebRequest -Uri https://github.com/teng-lin/notebooklm-py/archive/refs/heads/main.zip -OutFile "$env:TEMP\notebooklm.zip"; pip install "$env:TEMP\notebooklm.zip"
 ```
 
-### Authenticate NotebookLM
+### 6. Install Playwright (required for NotebookLM login)
+
 ```bash
-notebooklm login
+pip install playwright
+python -m playwright install chromium
 ```
-This opens a browser for Google OAuth and saves credentials locally.
 
-### Store API keys in .env (optional)
+Playwright is used only for the one-time browser-based Google login. It is not needed for subsequent pipeline runs.
 
-The orchestrator auto-loads a `.env` file at the project root, so you can store keys there instead of setting environment variables each session:
+### 7. Authenticate NotebookLM
+
+> This must be run in a **real terminal window** — it opens a browser for Google OAuth and cannot be run non-interactively.
+
+```powershell
+# Windows
+.venv\Scripts\notebooklm.exe login
+
+# macOS / Linux
+.venv/bin/notebooklm login
+```
+
+Sign in with your Google account. Credentials are saved to `~/.notebooklm/profiles/default/storage_state.json` and persist for approximately one year.
+
+**When do you need to re-login?**
+
+| Trigger | Frequency |
+|---|---|
+| First setup on a new machine | Once |
+| Google session revoked (password change, signing out everywhere, security event) | Rare, unpredictable |
+| Auth token naturally expires | ~1 year |
+| Normal use | Never — tokens persist automatically |
+
+### 8. Store API keys in .env
+
+Create a `.env` file at the project root (auto-loaded by the orchestrator):
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 MISTRAL_API_KEY=...
 GEMINI_API_KEY=...
+GROQ_API_KEY=...
 ```
 
-### Set environment variables
+Or set them per session:
 
 **Windows (PowerShell):**
 ```powershell
@@ -226,6 +281,8 @@ export MISTRAL_API_KEY="..."
 ---
 
 ## Usage
+
+> All examples below assume the `.venv` is **activated**. If not activated, replace `python` with `.venv/Scripts/python.exe` (Windows) or `.venv/bin/python` (macOS/Linux).
 
 ### Run the pipeline
 
@@ -247,11 +304,11 @@ Checkpoints pause the pipeline and print `Waiting for your response via 'respond
 
 ```bash
 # CP1 — approve source plan
-python pipeline/orchestrator.py respond "A"
-# CP1 — approve with edits
-python pipeline/orchestrator.py respond "E: remove source 2, add https://arxiv.org/abs/2401.12345"
+python pipeline/orchestrator.py respond "approve"
+# CP1 — approve with additions
+python pipeline/orchestrator.py respond "approve but also search for papers on MACE benchmarks"
 # CP1 — cancel
-python pipeline/orchestrator.py respond "C"
+python pipeline/orchestrator.py respond "cancel"
 
 # CP2 — pick directions
 python pipeline/orchestrator.py respond "1,3"
@@ -260,6 +317,7 @@ python pipeline/orchestrator.py respond "2: focus on simulation-free approaches"
 
 # CP3 — pick output format
 python pipeline/orchestrator.py respond "D"   # Report + Obsidian
+python pipeline/orchestrator.py respond "E"   # All formats
 python pipeline/orchestrator.py respond "G"   # Report + Obsidian + Excalidraw
 ```
 
@@ -294,7 +352,6 @@ python scripts/wiki_manager.py reingest --fresh
 python scripts/wiki_manager.py ingest raw/paper.pdf
 
 # Ingest and extract structured claims (RESULT/METHOD/MECHANISM/TABLE/COMPARISON):
-EXTRACT_CLAIMS=1 python scripts/wiki_manager.py ingest raw/paper.pdf
 python scripts/wiki_manager.py ingest raw/paper.pdf --claims
 ```
 
@@ -347,7 +404,7 @@ python scripts/wiki_manager.py export "equivariant" --format csv    # CSV
 python scripts/wiki_manager.py export "lattice dynamics" --format latex  # LaTeX table
 
 # Crystallise a mission/concept file into a wiki/concepts/ page:
-python scripts/wiki_manager.py crystallize docs/research_mission.md
+python scripts/wiki_manager.py crystallize output/2026-05-21/research_*.md
 ```
 
 ---
@@ -515,18 +572,18 @@ All agent system prompts use **prompt caching** (`cache_control: ephemeral`). Re
 
 **After a batch reingest:**
 ```bash
-python scripts/wiki_manager.py fix-tags   # clean up taxonomy tags
-python scripts/wiki_manager.py link       # cross-link related pages
-python scripts/wiki_manager.py make-hubs  # rebuild hub-and-spoke graph
+python scripts/wiki_manager.py fix-tags       # clean up taxonomy tags
+python scripts/wiki_manager.py link           # cross-link related pages
+python scripts/wiki_manager.py make-hubs      # rebuild hub-and-spoke graph
 python scripts/wiki_manager.py index-vectors  # rebuild semantic search index
 ```
 
 **Weekly deep-dive:**
 ```bash
 python pipeline/orchestrator.py start "Compare MACE vs NequIP vs CHGNet on MD accuracy"
-# → CP1: approve sources
-# → CP2: pick directions (e.g. "1,3")
-# → CP3: pick output (e.g. "G: report + obsidian + excalidraw")
+# → CP1: approve sources (e.g. "approve but also search for MACE-MH benchmarks")
+# → CP2: pick directions (e.g. "1,3" or "all")
+# → CP3: pick output (e.g. "E" for all formats)
 ```
 
 **Export evidence for a paper:**
@@ -537,6 +594,12 @@ python scripts/wiki_manager.py export "equivariant message passing" --format lat
 **Batch run multiple questions:**
 ```bash
 python scripts/auto_pilot.py questions.txt   # runs pipeline for each line
+```
+
+**Re-authenticate NotebookLM (if session was revoked):**
+```powershell
+# Windows — run in a real terminal, not Claude Code
+.venv\Scripts\notebooklm.exe login
 ```
 
 ---

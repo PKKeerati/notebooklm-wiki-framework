@@ -12,6 +12,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 import threading
 from datetime import datetime
@@ -394,22 +395,28 @@ class Orchestrator:
             state["status"] = "awaiting_cp1"
             return state
 
-        choice = choice.strip().upper()
+        choice_upper = choice.strip().upper()
         _banner(1, "Source Plan Approval")
-        if choice == "A":
+        _APPROVE = {"A", "OK", "YES", "APPROVE", "APPROVED", "Y", ""}
+        if choice_upper in _APPROVE:
             state["checkpoint_history"]["cp1"] = {"presented": True, "approved": True}
             state["current_step"] = "cp1_approved"
             _ok("Source plan approved.")
-        elif choice.startswith("E"):
-            edits = choice[1:].strip().lstrip(":").strip()
+        elif choice_upper.startswith("E") or choice_upper.startswith("EDIT") or choice_upper.startswith("REMOVE") or re.search(r"\bhttps?://", choice):
+            edits = choice.strip()
             state["source_edits"] = edits
             state["checkpoint_history"]["cp1"] = {"presented": True, "approved": True, "edits": edits}
             state["current_step"] = "cp1_approved"
             _ok(f"Source plan edited: {edits}")
-        elif choice == "C":
+        elif choice_upper in {"C", "CANCEL"}:
             state["status"] = "cancelled"
             state["current_step"] = "cancelled"
             print("  Pipeline cancelled.")
+        else:
+            # Unrecognised input — treat as approval with a note
+            state["checkpoint_history"]["cp1"] = {"presented": True, "approved": True}
+            state["current_step"] = "cp1_approved"
+            _ok(f"Source plan approved (response: {choice!r}).")
         return state
 
     def _checkpoint_2(self, state: dict) -> dict:

@@ -284,6 +284,59 @@ tags: [#tag1 #tag2 — from domain list above only]
 """
 
 
+STRUCTURE_PROMPT_MD = """\
+You are a research knowledge base builder for a materials science / ML potentials researcher.
+Given markdown content (a web article, blog post, repo README, or personal note), produce a dense,
+accurate Obsidian wiki page.
+
+Rules:
+- Extract only facts present in the text. Do not hallucinate or invent details.
+- NEVER write placeholder text like "[See full text...]" — if a section has no content, write N/A.
+- Be specific: include numbers, tool names, library names, URLs exactly as stated.
+- Tags must be chosen from these domains (lowercase-hyphenated):
+  #ml-potentials | #method-acceleration | #generative-models | #drug-discovery
+  #crystals-and-alloys | #molecules | #2d-materials | #proteins | #quantum-theory
+  #group-theory | #applied-mathematics | #gaussian-processes | #ml-theory
+  #phonons-and-anharmonicity | #electrochemistry | #quantum-photonics
+  #hydrogen-storage-materials | #h2-storage-simulations | #h2-storage-experiments
+  #porous-h2-adsorbents | #personal
+
+Output EXACTLY this format — no preamble, no text outside this structure:
+
+---
+title: [Full title as it appears, or infer from content]
+author: [Author or organization, or "unknown"]
+date: [Date YYYY-MM-DD or "unknown"]
+url: [Source URL if present, else ""]
+source: [Website, platform, or repo name — e.g. "Towards Data Science", "GitHub", "arXiv blog"]
+type: article
+tags: [#tag1 #tag2 — from domain list above only]
+---
+
+# [Title]
+
+## Summary
+[2–3 sentences: main topic, core argument or tool, and key takeaway. Be precise.]
+
+## Key Points
+- [Specific point with details/numbers where available]
+- [Second point]
+- [Add more as needed]
+
+## Tools & Methods
+- [Any software, framework, library, dataset, or method mentioned — N/A if none]
+
+## Code & Implementation
+[Relevant commands, configs, or code snippets exactly as written — N/A if none]
+
+## Relevance
+[1–2 sentences on relevance to ML potentials / materials simulation / research workflow]
+
+## Citation
+[Author] ([date]). [Title]. [Source/URL].
+"""
+
+
 def structure_with_llm(raw_text: str, pdf_name: str) -> str:
     truncated = raw_text[:25000]
     user_msg = f"Paper filename: {pdf_name}\n\nRaw extracted text:\n{truncated}"
@@ -301,6 +354,37 @@ def structure_with_llm(raw_text: str, pdf_name: str) -> str:
 
     print(f"  Structuring into wiki page [{LLM_BACKEND}]...")
     return fn(STRUCTURE_PROMPT, user_msg)
+
+
+def structure_md_with_llm(body: str, filename: str, fm_data: dict) -> str:
+    """Structure markdown content (web clip, note, README) into a wiki page."""
+    hints = []
+    for key, label in [("title", "Title"), ("url", "URL"), ("source", "URL"),
+                       ("author", "Author"), ("date", "Date"), ("created", "Date")]:
+        val = fm_data.get(key)
+        if val and label not in [h.split(":")[0] for h in hints]:
+            hints.append(f"{label}: {val}")
+
+    hint_block = "\n".join(hints)
+    user_msg = (
+        f"Source filename: {filename}\n"
+        + (f"Metadata hints:\n{hint_block}\n\n" if hint_block else "")
+        + f"Content:\n{body[:25000]}"
+    )
+
+    llm_map = {
+        "gemini":    _llm_gemini,
+        "groq":      _llm_groq,
+        "anthropic": _llm_anthropic,
+        "ollama":    _llm_ollama,
+        "mistral":   _llm_mistral,
+    }
+    fn = llm_map.get(LLM_BACKEND)
+    if not fn:
+        raise ValueError(f"Unknown LLM_BACKEND '{LLM_BACKEND}'. Choose: gemini | groq | anthropic | ollama | mistral")
+
+    print(f"  Structuring into wiki page [{LLM_BACKEND}]...")
+    return fn(STRUCTURE_PROMPT_MD, user_msg)
 
 
 def _llm_gemini(system: str, user: str) -> str:
@@ -755,21 +839,65 @@ def ingest_pdf(pdf_path: Path, with_claims: bool = False) -> None:
     print(f"  OK  wiki/{page_path.name}")
 
 
+def ingest_md(md_path: Path) -> None:
+    """Ingest a markdown file (web clip, note, README) into the wiki."""
+    md_path = md_path.resolve()
+    if not md_path.exists():
+        print(f"FAIL File not found: {md_path}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\n>> {md_path.name}")
+    LOG_DIR.mkdir(exist_ok=True)
+
+    content = md_path.read_text(encoding="utf-8", errors="ignore")
+
+    # Strip and preserve any YAML frontmatter (Obsidian Web Clipper, etc.)
+    fm_data: dict = {}
+    body = content
+    fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+    if fm_match:
+        try:
+            fm_data = yaml.safe_load(fm_match.group(1)) or {}
+        except Exception:
+            pass
+        body = content[fm_match.end():]
+
+    log_path = LOG_DIR / (md_path.stem + ".txt")
+    if log_path.exists():
+        print("  Using cached text from log/")
+        body = log_path.read_text(encoding="utf-8")
+    else:
+        log_path.write_text(body, encoding="utf-8")
+        print(f"  Cached to log/{log_path.name}")
+
+    structured = structure_md_with_llm(body, md_path.name, fm_data)
+    page_path = write_wiki_page(structured, md_path)
+    update_vectors(page_path, structured)
+    _log_operation("ingest-md", f"{md_path.name} → wiki/{page_path.name}")
+    print(f"  OK  wiki/{page_path.name}")
+
+
 def ingest_all() -> None:
     pdfs = sorted(RAW_DIR.glob("*.pdf"))
-    if not pdfs:
-        print(f"No PDFs found in {RAW_DIR}/")
-        print("Drop your paper PDFs into the raw/ folder and run again.")
+    mds  = sorted(RAW_DIR.glob("*.md"))
+
+    if not pdfs and not mds:
+        print(f"No PDFs or markdown files found in {RAW_DIR}/")
+        print("Drop paper PDFs or web-clipped .md files into raw/ and run again.")
         return
 
     existing_slugs = {p.stem for p in WIKI_DIR.glob("*.md")} if WIKI_DIR.exists() else set()
     new_pdfs = [p for p in pdfs if _slug(p.stem) not in existing_slugs]
+    new_mds  = [m for m in mds  if _slug(m.stem) not in existing_slugs]
+    total_new = len(new_pdfs) + len(new_mds)
+    already   = len(pdfs) + len(mds) - total_new
 
-    if not new_pdfs:
-        print(f"All {len(pdfs)} PDF(s) already ingested. Drop new papers into raw/ and try again.")
+    if not total_new:
+        print(f"All {len(pdfs)} PDF(s) and {len(mds)} MD(s) already ingested.")
         return
 
-    print(f"Found {len(new_pdfs)} new PDF(s) to ingest (skipping {len(pdfs) - len(new_pdfs)} already done)...")
+    print(f"Found {len(new_pdfs)} new PDF(s) and {len(new_mds)} new MD(s) "
+          f"(skipping {already} already done)...")
     failed = 0
     for pdf in new_pdfs:
         try:
@@ -777,10 +905,16 @@ def ingest_all() -> None:
         except Exception as e:
             print(f"  FAIL  {pdf.name} - {e}", file=sys.stderr)
             failed += 1
+    for md in new_mds:
+        try:
+            ingest_md(md)
+        except Exception as e:
+            print(f"  FAIL  {md.name} - {e}", file=sys.stderr)
+            failed += 1
 
     rebuild_index()
     total = len(list(WIKI_DIR.glob("*.md"))) - 1
-    print(f"\nDone. {len(new_pdfs) - failed} ingested, {failed} failed. Wiki: {total} pages total.")
+    print(f"\nDone. {total_new - failed} ingested, {failed} failed. Wiki: {total} pages total.")
 
 
 def reingest_all(fresh: bool = False) -> None:
@@ -1178,6 +1312,433 @@ def crystallize(mission_file: str | None = None) -> None:
     print(f"  → wiki/concepts/{slug}.md")
 
 
+# -- Ask (Q&A synthesis) ------------------------------------------------------
+
+_ASK_SYSTEM = """\
+You are a research assistant for a materials science / ML potentials researcher.
+Answer the question below using ONLY the knowledge provided from the wiki KB pages.
+
+Rules:
+- Cite sources using [[wikilink]] notation inline as you write.
+- Be specific: preserve numbers, model names, benchmark results exactly as stated in the pages.
+- Do NOT invent or speculate beyond what the pages contain.
+- If the KB lacks enough information to fully answer, say so explicitly in ## Gaps.
+
+Output exactly this structure:
+
+## Answer
+[Direct answer in 3–6 sentences with inline [[citations]]]
+
+## Evidence
+- [[slug|Title]]: [key supporting fact with numbers/metrics]
+- (one bullet per supporting page)
+
+## Gaps
+[What the KB doesn't cover — or "None" if fully answered]
+"""
+
+
+def _find_relevant(question: str, top_k: int = 8) -> list[tuple[str, float, str]]:
+    """Return [(slug, score, title)] for the most relevant KB pages.
+
+    Prefers semantic similarity when the index and API key are available;
+    falls back to keyword scoring from .vectors.json.
+    """
+    # Semantic path
+    if _SEM_VECTORS_PATH.exists() and os.environ.get("MISTRAL_API_KEY"):
+        q_vec = _embed(question)
+        if q_vec:
+            try:
+                import numpy as np
+                data = json.loads(_SEM_VECTORS_PATH.read_text(encoding="utf-8"))
+                q = np.array(q_vec)
+                results = []
+                for fname, info in data.items():
+                    d = np.array(info["vector"])
+                    norm = np.linalg.norm(q) * np.linalg.norm(d)
+                    sim = float(np.dot(q, d) / norm) if norm > 0 else 0.0
+                    slug = Path(fname).stem
+                    results.append((slug, sim, info.get("title", slug)))
+                results.sort(key=lambda x: x[1], reverse=True)
+                return results[:top_k]
+            except Exception:
+                pass  # fall through to keyword
+
+    # Keyword fallback
+    if not VECTORS_PATH.exists():
+        return []
+    vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
+    terms = question.lower().split()
+    results = []
+    for slug, meta in vectors.items():
+        haystack = f"{meta['title']} {meta['tags']} {meta['keywords']} {meta['authors']}".lower()
+        score = sum(1 for t in terms if re.search(r"\b" + re.escape(t) + r"\b", haystack))
+        if score > 0:
+            results.append((slug, float(score), meta.get("title", slug)))
+    results.sort(key=lambda x: x[1], reverse=True)
+    return results[:top_k]
+
+
+def ask_kb(question: str, top_k: int = 8, save: bool = False) -> None:
+    """Synthesize an answer to a research question from relevant KB pages."""
+    relevant = _find_relevant(question, top_k=top_k)
+    if not relevant:
+        print("No relevant pages found. Run 'all' to ingest papers, or try 'query' to check coverage.")
+        return
+
+    _fm_re = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
+    pages_content = ""
+    loaded: list[tuple[str, str]] = []  # (slug, title)
+
+    for slug, score, title in relevant:
+        page_path = WIKI_DIR / f"{slug}.md"
+        if not page_path.exists():
+            continue
+        content = page_path.read_text(encoding="utf-8", errors="ignore")
+        fm_match = _fm_re.match(content)
+        body = content[fm_match.end():].strip() if fm_match else content
+        pages_content += f"\n\n---\n### [[{slug}|{title}]]\n{body[:3000]}"
+        loaded.append((slug, title))
+
+    if not loaded:
+        print("Pages found in index but not on disk — run 'index' to rebuild.")
+        return
+
+    names = ", ".join(t for _, t in loaded[:4])
+    suffix = f" + {len(loaded) - 4} more" if len(loaded) > 4 else ""
+    print(f"  Drawing from {len(loaded)} pages: {names}{suffix}")
+
+    llm_fn = {
+        "gemini": _llm_gemini, "groq": _llm_groq,
+        "anthropic": _llm_anthropic, "ollama": _llm_ollama, "mistral": _llm_mistral,
+    }.get(LLM_BACKEND, _llm_gemini)
+
+    print(f"  Synthesizing [{LLM_BACKEND}]...")
+    answer = llm_fn(_ASK_SYSTEM, f"Question: {question}\n\nWiki Knowledge:\n{pages_content}")
+
+    print(f"\n{'=' * 60}")
+    print(answer)
+    print(f"{'=' * 60}\n")
+
+    if save:
+        concepts_dir = WIKI_DIR / "concepts"
+        concepts_dir.mkdir(parents=True, exist_ok=True)
+        out_path = concepts_dir / f"qa-{_slug(question[:60])}.md"
+        source_list = ", ".join(s for s, _ in loaded)
+        header = (
+            f"---\ntitle: \"Q&A — {question[:80]}\"\ntype: qa\n"
+            f"date: {datetime.now().strftime('%Y-%m-%d')}\n"
+            f"sources: [{source_list}]\n---\n\n"
+            f"# Q: {question}\n\n"
+        )
+        out_path.write_text(header + answer, encoding="utf-8")
+        _log_operation("ask", f"'{question[:80]}' → concepts/{out_path.name}")
+        print(f"  Saved → wiki/concepts/{out_path.name}")
+    else:
+        _log_operation("ask", f"'{question[:80]}' ({len(loaded)} pages)")
+
+
+# -- Health check -------------------------------------------------------------
+
+_HEALTH_CHECK_SYSTEM = """\
+You are a research knowledge base auditor for a materials science / ML potentials researcher.
+You receive a compact fingerprint of every page in the KB: slug, title, year, venue, tags, and key findings.
+
+Produce a health report with exactly these five sections. Use [[slug]] citations throughout. Be specific.
+
+## Inconsistencies
+Contradictions or suspicious discrepancies across pages (e.g. the same model reported with different
+benchmark scores on the same dataset, conflicting mechanistic claims).
+If none detected, write "None detected."
+
+## Missing Link Candidates
+Pairs of pages with strong conceptual overlap that have no See Also connection.
+Format each as: [[slug-a]] ↔ [[slug-b]] — one-line reason
+Limit to 5 pairs.
+
+## Data Gaps
+Pages with weak or missing content: mostly N/A sections, unknown year/venue, very thin findings,
+or an important topic not covered by any page.
+Format each as: [[slug]] — what is missing  (or "Topic gap: ..." for uncovered topics)
+Limit to 8 entries.
+
+## Suggested Concept Pages
+Cross-cutting themes spanning 3+ papers that deserve their own synthesis page.
+Format each as: "Proposed title" — [[slug-a]], [[slug-b]], [[slug-c]]
+Limit to 5 suggestions.
+
+## Research Questions
+Specific questions the KB raises but cannot fully answer from its current content.
+Each question must be grounded in actual page content, not generic.
+List exactly 5 questions.
+"""
+
+
+def _extract_key_findings(page_path: Path) -> str:
+    """Pull the first 300 chars of ## Key Findings as a single joined line."""
+    try:
+        content = page_path.read_text(encoding="utf-8", errors="ignore")
+        m = re.search(r"## Key Findings\s*\n(.*?)(?=\n##|\Z)", content, re.DOTALL)
+        if m:
+            lines = [ln.strip().lstrip("- ").strip()
+                     for ln in m.group(1).strip().splitlines() if ln.strip()]
+            return " / ".join(lines)[:300]
+    except Exception:
+        pass
+    return ""
+
+
+def _page_fingerprint(slug: str, meta: dict) -> str:
+    """Compact one-entry summary of a wiki page for the health-check LLM prompt."""
+    page_path = WIKI_DIR / f"{slug}.md"
+    findings = _extract_key_findings(page_path) if page_path.exists() else ""
+    title  = meta.get("title",  slug)
+    year   = meta.get("year",   "?")
+    venue  = meta.get("venue",  "")
+    tags   = meta.get("tags",   "")
+    venue_part = f", {venue}" if venue else ""
+    return (
+        f"[[{slug}|{title}]] ({year}{venue_part}) {tags}\n"
+        f"  {findings or '(no key findings)'}"
+    )
+
+
+def _save_health_report(content: str) -> None:
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    out_path = WIKI_DIR / f".health-check-{date_str}.md"
+    WIKI_DIR.mkdir(exist_ok=True)
+    out_path.write_text(content, encoding="utf-8")
+    print(f"\n  Report saved → wiki/.health-check-{date_str}.md")
+
+
+def health_check(topic: str | None = None, structural_only: bool = False) -> None:
+    """KB health check: structural lint + LLM content audit.
+
+    topic: scope the LLM phase to pages matching this keyword/topic.
+    structural_only: skip the LLM call, only run phase 1.
+    """
+    print("\n=== KB Health Check ===\n")
+    report_parts: list[str] = [
+        f"# KB Health Check\n\n*{datetime.now().strftime('%Y-%m-%d %H:%M')}*\n\n"
+    ]
+
+    # --- Phase 1: Structural (no LLM) ---
+    pages = [f for f in sorted(WIKI_DIR.glob("*.md"))
+             if f.name != "index.md" and not f.stem.startswith("hub-")]
+    all_stems = {p.stem for p in pages}
+    incoming: dict = defaultdict(set)
+    broken: list[tuple[str, str]] = []
+    thin: list[tuple[str, int]] = []
+
+    for page in pages:
+        content = page.read_text(encoding="utf-8", errors="ignore")
+        for link in re.findall(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]", content):
+            if link in all_stems:
+                incoming[link].add(page.stem)
+            else:
+                broken.append((page.stem, link))
+        na_count = len(re.findall(r"\bN/A\b", content, re.IGNORECASE))
+        if na_count >= 3:
+            thin.append((page.stem, na_count))
+
+    orphans = [p.stem for p in pages
+               if p.stem not in incoming and not p.stem.startswith("hub-")]
+
+    struct = ["## Structural\n\n"]
+    struct.append(f"- Total pages: {len(pages)}\n")
+    struct.append(f"- Broken wikilinks: {len(broken)}\n")
+    struct.append(f"- Orphan pages (no incoming links): {len(orphans)}\n")
+    struct.append(f"- Thin pages (3+ N/A sections): {len(thin)}\n")
+    if broken:
+        struct.append("\n**Broken links:**\n")
+        for src, lnk in broken[:20]:
+            struct.append(f"  - `[[{lnk}]]` ← `{src}`\n")
+        if len(broken) > 20:
+            struct.append(f"  - ... and {len(broken) - 20} more\n")
+    if orphans:
+        struct.append("\n**Orphan pages:**\n")
+        for o in orphans[:20]:
+            struct.append(f"  - [[{o}]]\n")
+        if len(orphans) > 20:
+            struct.append(f"  - ... and {len(orphans) - 20} more\n")
+
+    struct_block = "".join(struct)
+    print(struct_block)
+    report_parts.append(struct_block)
+
+    if structural_only:
+        _save_health_report("".join(report_parts))
+        _log_operation("health-check", f"structural only — {len(broken)} broken, {len(orphans)} orphans")
+        return
+
+    # --- Phase 2: LLM content audit ---
+    if not VECTORS_PATH.exists():
+        print("No vectors index — run 'all' first, then retry.")
+        _save_health_report("".join(report_parts))
+        return
+
+    vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
+
+    if topic:
+        relevant = _find_relevant(topic, top_k=30)
+        scoped = {s for s, _, _ in relevant}
+        vectors = {k: v for k, v in vectors.items() if k in scoped}
+        print(f"  Scoped to {len(vectors)} pages matching: '{topic}'")
+
+    fingerprints = [_page_fingerprint(slug, meta) for slug, meta in sorted(vectors.items())]
+    kb_size = len(fingerprints)
+    if not fingerprints:
+        print("No pages to analyze.")
+        _save_health_report("".join(report_parts))
+        return
+
+    scope_label = f"topic='{topic}'" if topic else "full KB"
+    print(f"  Analyzing {kb_size} pages ({scope_label}) [{LLM_BACKEND}]...")
+
+    fingerprint_block = "\n\n".join(fingerprints)
+    llm_fn = {
+        "gemini": _llm_gemini, "groq": _llm_groq,
+        "anthropic": _llm_anthropic, "ollama": _llm_ollama, "mistral": _llm_mistral,
+    }.get(LLM_BACKEND, _llm_gemini)
+
+    llm_report = llm_fn(
+        _HEALTH_CHECK_SYSTEM,
+        f"KB Fingerprint ({kb_size} pages, {scope_label}):\n\n{fingerprint_block}",
+    )
+
+    print(f"\n{'=' * 60}")
+    print(llm_report)
+    print(f"{'=' * 60}")
+
+    report_parts.append("\n" + llm_report + "\n")
+    _save_health_report("".join(report_parts))
+    _log_operation("health-check", f"{kb_size} pages, {len(broken)} broken, {len(orphans)} orphans")
+
+
+# -- Cross-synthesize ---------------------------------------------------------
+
+_CROSS_SYNTHESIZE_SYSTEM = """\
+You are a research knowledge base enricher for a materials science / ML potentials researcher.
+Given one paper's wiki page and a digest of all other papers in the KB, write a concise
+## Cross-KB Insights section that surfaces specific connections to other papers.
+
+Rules:
+- Cite other papers using [[slug|Title]] notation.
+- Be specific: comparisons, contradictions, complementary methods, shared benchmarks.
+- Do NOT repeat findings already stated in the paper's own sections.
+- 4–8 bullet points maximum. Each bullet names a specific other paper.
+
+Output ONLY the section — no preamble:
+
+## Cross-KB Insights
+- [[slug|Title]]: one sentence on connection, comparison, or contrast
+"""
+
+
+def _build_kb_digest(pages: list[Path]) -> list[str]:
+    """Return one digest line per page: [[slug|Title]]: key findings (≤150 chars)."""
+    lines = []
+    for page in pages:
+        content = page.read_text(encoding="utf-8", errors="ignore")
+        title_m = re.search(r"^title:\s*(.+)$", content, re.MULTILINE)
+        title = title_m.group(1).strip() if title_m else page.stem
+        findings = _extract_key_findings(page)[:150]
+        lines.append(f"[[{page.stem}|{title}]]: {findings or '(no key findings)'}")
+    return lines
+
+
+def cross_synthesize() -> None:
+    """Add ## Cross-KB Insights to every wiki page using a KB-wide digest."""
+    pages = [f for f in sorted(WIKI_DIR.glob("*.md"))
+             if f.name != "index.md"
+             and not f.stem.startswith("hub-")
+             and f.parent == WIKI_DIR]
+
+    if not pages:
+        print("No wiki pages found. Run 'all' or 'reingest' first.")
+        return
+
+    print(f"Building KB digest from {len(pages)} pages...")
+    digest_lines = _build_kb_digest(pages)
+
+    llm_fn = {
+        "gemini": _llm_gemini, "groq": _llm_groq,
+        "anthropic": _llm_anthropic, "ollama": _llm_ollama, "mistral": _llm_mistral,
+    }.get(LLM_BACKEND, _llm_gemini)
+
+    _fm_re = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
+    already_done = sum(1 for p in pages if "## Cross-KB Insights" in p.read_text(encoding="utf-8", errors="ignore"))
+    print(f"Cross-synthesizing [{LLM_BACKEND}] — {already_done} already done, {len(pages) - already_done} remaining...")
+    updated = failed = skipped = 0
+
+    for page in pages:
+        content = page.read_text(encoding="utf-8", errors="ignore")
+        title_m = re.search(r"^title:\s*(.+)$", content, re.MULTILINE)
+        title = title_m.group(1).strip() if title_m else page.stem
+
+        # Exclude this page from the digest shown to the LLM
+        other_digest = "\n".join(
+            line for line in digest_lines
+            if not line.startswith(f"[[{page.stem}|")
+        )
+
+        # Skip pages already enriched — safe to resume after interruption
+        if "## Cross-KB Insights" in content:
+            skipped += 1
+            continue
+
+        fm_match = _fm_re.match(content)
+        body = content[fm_match.end():].strip() if fm_match else content
+
+        user_msg = (
+            f"Current paper: [[{page.stem}|{title}]]\n\n"
+            f"Paper content:\n{body[:4000]}\n\n"
+            f"All other papers in KB:\n{other_digest}"
+        )
+
+        try:
+            insights = llm_fn(_CROSS_SYNTHESIZE_SYSTEM, user_msg)
+
+            # Strip any existing Cross-KB Insights section
+            content = re.sub(
+                r"\n\n## Cross-KB Insights\n.*?(?=\n\n##|\n\n---|\Z)",
+                "", content, flags=re.DOTALL,
+            )
+
+            # Insert before the ingestion footer, or at end
+            footer_m = re.search(r"\n\n---\n\*Ingested:", content)
+            if footer_m:
+                content = content[:footer_m.start()] + f"\n\n{insights}" + content[footer_m.start():]
+            else:
+                content = content + f"\n\n{insights}"
+
+            page.write_text(content, encoding="utf-8")
+            print(f"  enriched: {page.name}")
+            updated += 1
+        except Exception as e:
+            print(f"  FAIL {page.name}: {e}", file=sys.stderr)
+            failed += 1
+
+    _log_operation("cross-synthesize", f"{updated} enriched, {skipped} skipped, {failed} failed")
+    print(f"\nDone. {updated} enriched, {skipped} already done (skipped), {failed} failed.")
+
+
+# -- Redo (full KB rebuild) ---------------------------------------------------
+
+def redo() -> None:
+    """Full KB rebuild: fresh reingest → cross-synthesize → link → make-hubs → index."""
+    print("=== KB Redo ===\n")
+    reingest_all(fresh=True)
+    print("\n--- Cross-synthesis pass ---\n")
+    cross_synthesize()
+    print("\n--- Wiring See Also links ---\n")
+    link_pages()
+    print("\n--- Rebuilding category hubs ---\n")
+    make_hubs()
+    rebuild_index()
+    print("\n=== Redo complete ===")
+
+
 # -- Orphan cleanup -----------------------------------------------------------
 
 def cleanup_orphans(force: bool = False) -> None:
@@ -1287,7 +1848,15 @@ def main() -> None:
             "  python scripts/wiki_manager.py index-vectors\n"
             "  python scripts/wiki_manager.py lint\n"
             "  python scripts/wiki_manager.py export 'OER catalysis' --format marp\n"
-            "  python scripts/wiki_manager.py crystallize output/2026-05-12/research_*.md\n\n"
+            "  python scripts/wiki_manager.py crystallize output/2026-05-12/research_*.md\n"
+            "  python scripts/wiki_manager.py ask 'Which ML potentials work best for thermal conductivity?'\n"
+            "  python scripts/wiki_manager.py ask 'Compare MACE vs NequIP accuracy' --top 10 --save\n"
+            "  python scripts/wiki_manager.py health-check\n"
+            "  python scripts/wiki_manager.py health-check --topic 'thermal conductivity'\n"
+            "  python scripts/wiki_manager.py health-check --structural-only\n"
+            "  python scripts/wiki_manager.py ingest-md raw/article.md\n"
+            "  python scripts/wiki_manager.py redo\n"
+            "  python scripts/wiki_manager.py cross-synthesize\n\n"
             "Backends (set env vars to override defaults):\n"
             "  PDF_BACKEND=gemini|pymupdf|mistral   (default: pymupdf)\n"
             "  LLM_BACKEND=gemini|groq|anthropic|ollama|mistral  (default: gemini)\n"
@@ -1305,6 +1874,9 @@ def main() -> None:
     p_ingest.add_argument("pdf", help="Path to the PDF file")
     p_ingest.add_argument("--claims", action="store_true",
                           help="Extract structured claims from the paper (extra LLM call)")
+
+    p_ingest_md = sub.add_parser("ingest-md", help="Ingest a single Markdown file (web clip, note, README)")
+    p_ingest_md.add_argument("file", help="Path to the .md file")
 
     p_query = sub.add_parser("query", help="Search across the KB")
     p_query.add_argument("search", help="Search terms (quoted string)")
@@ -1335,12 +1907,31 @@ def main() -> None:
     p_crystallize = sub.add_parser("crystallize", help="Distill a mission file into a permanent concept page")
     p_crystallize.add_argument("file", nargs="?", help="Path to research mission markdown file (auto-detects latest if omitted)")
 
+    p_ask = sub.add_parser("ask", help="Synthesize an answer from the KB (Q&A with citations)")
+    p_ask.add_argument("question", help="Research question (quoted string)")
+    p_ask.add_argument("--top", type=int, default=8,
+                       help="Number of pages to draw from (default: 8)")
+    p_ask.add_argument("--save", action="store_true",
+                       help="Save the answer as wiki/concepts/qa-*.md")
+
+    p_hc = sub.add_parser("health-check", help="Structural lint + LLM content audit of the KB")
+    p_hc.add_argument("--topic", default=None,
+                      help="Scope the LLM audit to pages matching this topic (default: full KB)")
+    p_hc.add_argument("--structural-only", action="store_true",
+                      help="Run structural checks only (no LLM call)")
+
+    sub.add_parser("cross-synthesize", help="Add Cross-KB Insights section to every wiki page")
+    sub.add_parser("redo", help="Full KB rebuild: fresh reingest → cross-synthesize → link → hubs → index")
+
     args = parser.parse_args()
 
     if args.command == "all":
         ingest_all()
     elif args.command == "ingest":
         ingest_pdf(Path(args.pdf), with_claims=args.claims)
+        rebuild_index()
+    elif args.command == "ingest-md":
+        ingest_md(Path(args.file))
         rebuild_index()
     elif args.command == "query":
         if args.semantic:
@@ -1367,6 +1958,21 @@ def main() -> None:
         export_kb(args.topic, fmt=args.format)
     elif args.command == "crystallize":
         crystallize(args.file)
+    elif args.command == "ask":
+        ask_kb(args.question, top_k=args.top, save=args.save)
+    elif args.command == "health-check":
+        health_check(topic=args.topic, structural_only=args.structural_only)
+    elif args.command == "cross-synthesize":
+        cross_synthesize()
+    elif args.command == "redo":
+        redo()
+
+
+class WikiManager:
+    """Thin class wrapper so pipeline/orchestrator.py can import WikiManager."""
+
+    def crystallize(self, mission_file: str | None = None) -> None:
+        crystallize(mission_file)
 
 
 if __name__ == "__main__":

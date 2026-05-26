@@ -3,6 +3,7 @@ import re
 import time
 from pathlib import Path
 from .base import BaseAgent
+from .fah import FahAgent
 from .utils import search_semantic_scholar, format_papers_for_llm, paper_url
 
 # LLM selects papers by number only — never writes URLs.
@@ -68,22 +69,13 @@ Generate 3-6 groups, 4-10 terms each, covering the vocabulary PK's papers are li
 class DaoAgent(BaseAgent):
     def run(self, state: dict) -> dict:
         wiki_dir = Path(state.get("wiki_root", "wiki"))
-
-        # Load KB index
-        index_text = ""
-        index_path = wiki_dir / "index.md"
-        if index_path.exists():
-            index_text = index_path.read_text(encoding="utf-8", errors="ignore")[:3000]
-
-        # Load hub pages for domain context
-        hub_parts = []
-        for hub in sorted(wiki_dir.glob("hub-*.md")):
-            text = hub.read_text(encoding="utf-8", errors="ignore")[:800]
-            hub_parts.append(f"### {hub.stem}\n{text}")
-        hub_context = "\n\n".join(hub_parts[:6]) or "(no hub pages found)"
-
-        # Graph search for relevant KB pages
         pk_input = state["pk_input"]
+
+        # Fah: synthesize KB context before gap analysis and source search
+        FahAgent(self.client, self.pipeline_dir).run(state)
+        fah_synthesis = self._read_handoff("fah")
+
+        # Graph search for relevant KB pages (still used for page-name listing)
         graph_results = self.graph_search(pk_input, wiki_dir, top_k=12, hops=2)
         if graph_results:
             existing_pages = "\n".join(
@@ -135,8 +127,7 @@ class DaoAgent(BaseAgent):
         user_msg = (
             f"PK's question: {pk_input}\n"
             f"Run ID: {state['run_id']}\n\n"
-            f"### Domain Hub Context:\n{hub_context}\n\n"
-            f"KB index:\n{index_text or '[empty]'}\n\n"
+            f"### Synthesized KB Context (from Fah):\n{fah_synthesis}\n\n"
             f"Most relevant KB pages (graph search):\n{existing_pages}\n\n"
             f"Existing wiki page titles: {', '.join(titles) or '[none]'}\n\n"
             f"Papers from Semantic Scholar (reference by number only — [1], [2], ...):\n{papers_block}\n\n"

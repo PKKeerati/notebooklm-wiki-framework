@@ -1,2 +1,2 @@
-notebook_id: c2e16d78-eb52-425c-a601-a52be0289d33
-url: https://notebooklm.google.com/notebook/c2e16d78-eb52-425c-a601-a52be0289d33
+notebook_id: 1fac1789-0d8e-4143-9f91-41235ff6485a
+url: https://notebooklm.google.com/notebook/1fac1789-0d8e-4143-9f91-41235ff6485a

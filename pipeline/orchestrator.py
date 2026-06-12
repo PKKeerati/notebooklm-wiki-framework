@@ -139,7 +139,7 @@ class Orchestrator:
             except ImportError:
                 _err("mistralai not installed. Run: pip install mistralai")
                 sys.exit(1)
-            self.client = Mistral(api_key=api_key)
+            self.client = Mistral(api_key=api_key, timeout_ms=120_000)
         else:
             api_key = os.environ.get("ANTHROPIC_API_KEY")
             if not api_key:
@@ -469,7 +469,32 @@ class Orchestrator:
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+def _check_notebooklm_auth() -> None:
+    """Abort with a clear message if NLM session is not active."""
+    try:
+        from pipeline.notebooklm_client import NLMClient
+    except ImportError:
+        try:
+            from notebooklm_client import NLMClient  # type: ignore[no-redef]
+        except ImportError:
+            return  # notebooklm-py not installed — Builder will handle gracefully
+    print("  Checking NotebookLM session...", end=" ", flush=True)
+    if NLMClient.check_auth():
+        print("✓")
+    else:
+        print("✗")
+        print()
+        print("  NotebookLM session is not active.")
+        print("  Run this from the project root (in a real terminal, not Claude Code):")
+        print()
+        print("    .venv\\Scripts\\notebooklm.exe login   # Windows")
+        print("    .venv/bin/notebooklm login            # macOS / Linux")
+        print()
+        sys.exit(1)
+
+
 def _cmd_start(args: argparse.Namespace) -> None:
+    _check_notebooklm_auth()
     orch = Orchestrator()
     state = new_state(args.question)
 
@@ -497,6 +522,10 @@ def _cmd_resume(_args: argparse.Namespace) -> None:
         cp = state["status"].replace("awaiting_", "").upper()
         print(f"  Pipeline is paused at {cp}. Use 'respond <choice>' to continue.")
         sys.exit(0)
+    # Only check NLM auth if Builder hasn't run yet
+    _NLM_NEEDED_BEFORE = {"start", "dao_complete", "builder_complete"}
+    if state.get("current_step") in _NLM_NEEDED_BEFORE:
+        _check_notebooklm_auth()
     state["status"] = "running"
     print(_sep())
     print(f"  Resuming run: {state['run_id']}")

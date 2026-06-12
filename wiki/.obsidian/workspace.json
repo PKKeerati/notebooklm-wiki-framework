@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "a08fe2d2027dc77d",
+        "id": "0b58ad73236a4e1b",
         "type": "tabs",
         "children": [
           {
-            "id": "2d1126b7b98c09dc",
+            "id": "9c5a21bdb2286ac4",
             "type": "leaf",
             "state": {
               "type": "graph",
@@ -74,7 +74,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 522.5
+    "width": 283.5
   },
   "right": {
     "id": "c92e457f053cf5cf",
@@ -176,9 +176,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "2d1126b7b98c09dc",
+  "active": "9c5a21bdb2286ac4",
   "lastOpenFiles": [
+    "concepts/acceptance-rules-for-grand-canonical-monte-carlo-and-hybrid-.md",
+    "brief-2026-05-26.md",
+    "concepts/grand-canonical-monte-carlo---molecular-dynamics-w-insights.md",
+    "Q4.md",
     "hub-method-acceleration.md",
+    "Q1.md",
     "Q5.md",
     "hub-quantum-theory.md",
     "hub-quantum-photonics.md",
@@ -199,11 +204,6 @@
     "hub-electrochemistry.md",
     "hub-drug-discovery.md",
     "hub-crystals-and-alloys.md",
-    "hub-applied-mathematics.md",
-    "hub-2d-materials.md",
-    "superoxide-stability-for-reversible-na-o₂-electrochemistry.md",
-    "transferable-machine-learning-model-of-the-electron-density.md",
-    "order-force-constants-fcs-can-be-extracted-from-a-gaussian-p.md",
     "Untitled.canvas",
     "concepts",
     "Untitled 8.canvas",

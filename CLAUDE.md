@@ -46,15 +46,29 @@ Claude Code: **always prefix Python commands with `.venv/Scripts/python.exe`** (
 # Ingest all new PDFs from raw/
 .venv/Scripts/python.exe scripts/wiki_manager.py all
 
-# Ingest one PDF
+# Ingest one PDF (add --claims for structured claims extraction)
 .venv/Scripts/python.exe scripts/wiki_manager.py ingest raw/paper.pdf
 
-# Semantic search across the KB
+# Graph maintenance
+.venv/Scripts/python.exe scripts/wiki_manager.py fix-tags      # fix/re-run taxonomy tags
+.venv/Scripts/python.exe scripts/wiki_manager.py link          # add See Also wikilinks
+.venv/Scripts/python.exe scripts/wiki_manager.py make-hubs     # rebuild hub-and-spoke pages
+.venv/Scripts/python.exe scripts/wiki_manager.py fix-links     # repair broken [[wikilinks]] (fuzzy slug matching)
+.venv/Scripts/python.exe scripts/wiki_manager.py cross-synthesize  # add Cross-KB Insights to every page (resumable)
+
+# Search and query
 .venv/Scripts/python.exe scripts/wiki_manager.py query "equivariant message passing benchmark"
+.venv/Scripts/python.exe scripts/wiki_manager.py ask "How does MACE compare to NequIP?"
 
 # Rebuild wiki/index.md
 .venv/Scripts/python.exe scripts/wiki_manager.py index
+
+# Audit
+.venv/Scripts/python.exe scripts/wiki_manager.py lint          # broken links + orphans
+.venv/Scripts/python.exe scripts/wiki_manager.py health-check  # structural + LLM content audit
 ```
+
+**Slug truncation:** `_slug()` in `wiki_manager.py` caps filenames at **60 characters**. Any code that generates `[[wikilinks]]` must use `_slug(title)` — never derive slugs from raw titles directly, or links will break.
 
 **Backend config** — set in `scripts/wiki_manager.py` or via env vars:
 ```bash
@@ -90,7 +104,7 @@ Install `notebooklm-py` from GitHub — it is not on PyPI (see `requirements.txt
 Dao [→ Fah internally] → Builder → Cherry → Nam → [Som ∥ Manao] → Mod → Chompoo → Nanny
 ```
 
-Fah is called inside `DaoAgent.run()` as its first step — not by the orchestrator. The orchestrator always starts from Dao.
+**Fah** is the KB Synthesizer — called as the first step inside `DaoAgent.run()`, not by the orchestrator. It runs `graph_search` → `keyword_search` on the KB, reads up to 10 relevant pages (2500 chars each), and writes a compact synthesis (`handoff_fah.md`) that Dao reads instead of browsing the raw index. This is what makes Dao token-efficient.
 
 The orchestrator (`pipeline/orchestrator.py`) is a state machine keyed on `state["current_step"]`. It saves state to `pipeline/pipeline_state.json` after every step so runs survive interruption. Som and Manao are always launched in parallel via `threading.Thread`.
 
@@ -139,6 +153,7 @@ Defined in `scripts/wiki_manager.py` as the `TAXONOMY` dict. Controls how Obsidi
 |---|---|
 | `pipeline/orchestrator.py` | State machine + CLI entry point |
 | `pipeline/agents/base.py` | `BaseAgent` with `_llm()` (prompt caching) |
+| `pipeline/agents/fah.py` | FahAgent — KB Synthesizer, called inside Dao |
 | `pipeline/agents/*.py` | One file per agent (Dao, Builder, Cherry, Nam, Som, Manao, Mod, Nanny) |
 | `pipeline/pipeline_state.json` | Live run state (gitignored) |
 | `pipeline/handoffs/` | Inter-agent communication files (gitignored) |
@@ -146,6 +161,7 @@ Defined in `scripts/wiki_manager.py` as the `TAXONOMY` dict. Controls how Obsidi
 | `scripts/mistral_ocr_client.py` | Standalone Mistral OCR client |
 | `wiki/index.md` | Auto-generated vault index — Dao reads this |
 | `wiki/.vectors.json` | Embedding index for semantic search (gitignored) |
+| `scripts/auto_pilot.py` | Batch pipeline runner — runs orchestrator for each line in a questions file |
 | `AGENTS.md` | Full agent specification and schema reference |
 
 ## Gitignored at Runtime

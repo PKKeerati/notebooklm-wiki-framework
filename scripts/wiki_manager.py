@@ -1175,6 +1175,80 @@ def lint() -> None:
     _log_operation("lint", f"{len(broken)} broken links, {len(orphans)} orphans")
 
 
+# -- Fix broken wikilinks -----------------------------------------------------
+
+def fix_broken_links() -> None:
+    """Repair broken [[wikilinks]] across all wiki pages using fuzzy slug matching."""
+    from difflib import SequenceMatcher
+
+    pages = [f for f in WIKI_DIR.glob("*.md")]
+    all_stems = {p.stem for p in pages}
+
+    def _best_match(lnk: str) -> str | None:
+        if lnk in all_stems:
+            return lnk
+        # Try truncating to 60 chars (matches _slug() limit)
+        truncated = lnk[:60]
+        if truncated in all_stems:
+            return truncated
+        # Find stem that starts with the same prefix (first 40 chars)
+        prefix = lnk[:40]
+        candidates = [s for s in all_stems if s.startswith(prefix)]
+        if len(candidates) == 1:
+            return candidates[0]
+        if len(candidates) > 1:
+            # Pick closest by edit distance
+            best = max(candidates, key=lambda s: SequenceMatcher(None, lnk, s).ratio())
+            if SequenceMatcher(None, lnk, best).ratio() >= 0.80:
+                return best
+        # Broad fuzzy fallback
+        best = max(all_stems, key=lambda s: SequenceMatcher(None, lnk, s).ratio())
+        ratio = SequenceMatcher(None, lnk, best).ratio()
+        if ratio >= 0.85:
+            return best
+        return None
+
+    fixed_pages = 0
+    fixed_links = 0
+    removed_links = 0
+
+    for page in pages:
+        content = page.read_text(encoding="utf-8", errors="ignore")
+        original = content
+
+        # Find all wikilinks and fix broken ones
+        def _replace(m: re.Match) -> str:
+            nonlocal fixed_links, removed_links
+            lnk = m.group(1)
+            display = m.group(2)  # may be None
+            if lnk in all_stems:
+                return m.group(0)  # already valid
+            best = _best_match(lnk)
+            if best:
+                fixed_links += 1
+                return f"[[{best}|{display}]]" if display else f"[[{best}]]"
+            # No match — keep display text if available, else drop brackets
+            removed_links += 1
+            return display if display else lnk
+
+        content = re.sub(
+            r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]",
+            _replace,
+            content,
+        )
+
+        # Remove list lines whose wikilink was unrepairable and left bare text
+        # (lines that were "- some-bare-slug" with no display text)
+        content = re.sub(r"^- [a-z][a-z0-9-]{20,}\n", "", content, flags=re.MULTILINE)
+
+        if content != original:
+            page.write_text(content, encoding="utf-8")
+            fixed_pages += 1
+
+    print(f"  Fixed: {fixed_links} links repaired, {removed_links} removed, across {fixed_pages} pages.")
+    _log_operation("fix-links", f"{fixed_links} repaired, {removed_links} removed, {fixed_pages} pages")
+
+
 # -- Export (ported from Repo B) ----------------------------------------------
 
 _EXPORT_SYSTEMS = {
@@ -1888,6 +1962,7 @@ def main() -> None:
                             help="Clear log/ cache and re-extract PDFs via PDF_BACKEND (slower)")
 
     sub.add_parser("fix-tags", help="Strip bad tags and re-run keyword matcher on all pages")
+    sub.add_parser("fix-links", help="Repair broken [[wikilinks]] using fuzzy slug matching")
 
     p_link = sub.add_parser("link", help="Add See Also wikilinks between related pages")
     p_link.add_argument("--top", type=int, default=5,
@@ -1948,6 +2023,8 @@ def main() -> None:
         reingest_all(fresh=args.fresh)
     elif args.command == "fix-tags":
         fix_tags()
+    elif args.command == "fix-links":
+        fix_broken_links()
     elif args.command == "link":
         link_pages(top_n=args.top)
     elif args.command == "make-hubs":

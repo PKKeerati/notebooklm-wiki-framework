@@ -22,6 +22,14 @@ def _available() -> bool:
 
 # ── Async implementations ─────────────────────────────────────────────────────
 
+async def _check_auth_async() -> bool:
+    """Lightweight auth probe — list notebooks to verify session is alive."""
+    from notebooklm import NotebookLMClient
+    async with await NotebookLMClient.from_storage() as client:
+        await client.notebooks.list()
+    return True
+
+
 async def _create_notebook_async(title: str) -> str | None:
     from notebooklm import NotebookLMClient
     async with await NotebookLMClient.from_storage() as client:
@@ -231,6 +239,16 @@ class NLMClient:
     @staticmethod
     def available() -> bool:
         return _available()
+
+    @staticmethod
+    def check_auth() -> bool:
+        """Return True if NLM session is alive, False if login is needed."""
+        if not _available():
+            return False
+        try:
+            return asyncio.run(_check_auth_async())
+        except Exception:
+            return False
 
     @staticmethod
     def create_notebook(title: str) -> str | None:

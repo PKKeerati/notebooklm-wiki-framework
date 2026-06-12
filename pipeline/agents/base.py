@@ -67,14 +67,19 @@ class BaseAgent:
                 time.sleep(sleep_s)
                 return resp.choices[0].message.content
             except Exception as e:
-                if "429" in str(e) or "rate_limited" in str(e).lower():
+                err = str(e).lower()
+                if "429" in str(e) or "rate_limited" in err:
                     import random
                     wait = 60 * (attempt + 1) + random.uniform(0, 10)
                     print(f"  Rate limited — waiting {wait:.0f}s before retry {attempt + 1}/3...")
                     time.sleep(wait)
+                elif "timeout" in err or "readtimeout" in err or "timed out" in err:
+                    wait = 10 * (attempt + 1)
+                    print(f"  Mistral timeout — retrying in {wait}s (attempt {attempt + 1}/3)...")
+                    time.sleep(wait)
                 else:
                     raise
-        raise RuntimeError("Mistral rate limit exceeded after 3 retries.")
+        raise RuntimeError("Mistral request failed after 3 retries (rate limit or timeout).")
 
     # ── KB vector search ──────────────────────────────────────────────────────
 
